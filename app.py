@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from utils.data_loader import load_articles, mark_as_read, mark_all_as_read
+from utils.data_loader import load_articles, mark_as_read, mark_all_as_read, load_raw_articles
 from utils.feedback import save_feedback
 
 # ─── ページ設定 ─────────────────────────────────
@@ -190,15 +190,29 @@ st.markdown(f"### {CATEGORY_LABELS.get(selected_category, selected_category)}")
 articles = load_articles(unread_only=unread_only, category=selected_category)
 
 if not articles:
-    st.info("📭 表示できる記事がありません。GitHub Actionsでフェッチを実行してください。")
-    st.markdown("""
-    **初回セットアップ後の手順:**
-    1. リポジトリの Actions タブを開く
-    2. `Fetch RSS` ワークフローを手動実行
-    3. `Process Articles` ワークフローを手動実行
-    4. このページをリロード
-    """)
-else:
+    raw_articles = load_raw_articles()
+
+    if raw_articles:
+        articles = []
+        for r in raw_articles:
+            articles.append({
+                "article_id": r.get("url", ""),
+                "title": r.get("title", ""),
+                "summary": "(RAW) " + r.get("title", ""),
+                "url": r.get("url", ""),
+                "master_category": "OTHER",
+                "tags": [],
+                "adjusted_score": 0.0,
+                "is_read": False,
+                "is_fallback": True,
+                "source": r.get("source", ""),
+                "published_at": r.get("published_at", "")
+            })
+    else:
+        st.info("📭 表示できる記事がありません（RAWも空）")
+
+# 👇 ここは必ず if の外！
+if articles:
     st.caption(f"{len(articles)} 件表示中")
 
     for article in articles:
