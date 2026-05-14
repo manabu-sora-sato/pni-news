@@ -1,0 +1,48 @@
+# PNI - RSSフィード設定
+# カテゴリ別に初期フィードを設定
+
+feeds:
+  DEV:
+    - name: "Zenn Tech"
+      url: "https://zenn.dev/feed"
+      lang: "ja"
+    - name: "Qiita Popular"
+      url: "https://qiita.com/popular-items/feed"
+      lang: "ja"
+    - name: "AI Now (Google Blog)"
+      url: "https://blog.google/technology/ai/rss/"
+      lang: "en"
+    - name: "OpenAI Blog"
+      url: "https://openai.com/blog/rss.xml"
+      lang: "en"
+    - name: "Hugging Face Blog"
+      url: "https://huggingface.co/blog/feed.xml"
+      lang: "en"
+    - name: "GitHub Blog"
+      url: "https://github.blog/feed/"
+      lang: "en"
+
+  ECON:
+    - name: "東洋経済オンライン"
+      url: "https://toyokeizai.net/list/feed/rss"
+      lang: "ja"
+    - name: "日経ビジネス"
+      url: "https://business.nikkei.com/rss/sns/nb.rdf"
+      lang: "ja"
+    - name: "Reuters Business"
+      url: "https://feeds.reuters.com/reuters/businessNews"
+      lang: "en"
+    - name: "Bloomberg Technology"
+      url: "https://feeds.bloomberg.com/technology/news.rss"
+      lang: "en"
+
+  HEALTH:
+    - name: "厚生労働省 新着情報"
+      url: "https://www.mhlw.go.jp/rss/shinchaku.rdf"
+      lang: "ja"
+    - name: "Medical Xpress"
+      url: "https://medicalxpress.com/rss-feed/breaking/"
+      lang: "en"
+    - name: "Harvard Health Blog"
+      url: "https://www.health.harvard.edu/blog/feed"
+      lang: "en"
