@@ -23,11 +23,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Push to Hugging Face
+      - name: Clone HF Space and update files
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
+          git clone https://cryuff:$HF_TOKEN@huggingface.co/spaces/cryuff/pni-news hf_space
+          cp app.py hf_space/
+          cp feeds.yaml hf_space/
+          cp fetch_rss.py hf_space/
+          cp process_articles.py hf_space/
+          cp requirements.txt hf_space/
+          cp Dockerfile hf_space/
+          cp -r utils hf_space/
+          cd hf_space
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git remote add hf https://cryuff:$HF_TOKEN@huggingface.co/spaces/cryuff/pni-news
-          git push hf main:main --force
+          git add app.py feeds.yaml fetch_rss.py process_articles.py requirements.txt Dockerfile utils/
+          git diff --staged --quiet || git commit -m "deploy: update from GitHub"
+          git push
