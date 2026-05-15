@@ -1,0 +1,31 @@
+name: Deploy to Hugging Face
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'app.py'
+      - 'feeds.yaml'
+      - 'fetch_rss.py'
+      - 'process_articles.py'
+      - 'requirements.txt'
+      - 'utils/**'
+      - 'Dockerfile'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Push to Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote add hf https://cryuff:$HF_TOKEN@huggingface.co/spaces/cryuff/pni-news
+          git push hf main --force
