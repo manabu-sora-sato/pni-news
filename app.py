@@ -12,6 +12,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from utils.data_loader import load_articles, mark_as_read, mark_all_as_read
 from utils.feedback import save_feedback
 
+
+
 # ─── ページ設定 ─────────────────────────────────
 st.set_page_config(
     page_title="PNI - パーソナル・ニュース・インテリジェンス",
@@ -57,6 +59,7 @@ html, body, [class*="css"] {
     letter-spacing: 0.05em;
     margin-right: 6px;
 }
+.badge-NEWS   { background: #1a2a3a; color: #79c0ff; border: 1px solid #79c0ff44; }
 .badge-DEV    { background: #0f3460; color: #58a6ff; border: 1px solid #58a6ff44; }
 .badge-ECON   { background: #1a3a1a; color: #56d364; border: 1px solid #56d36444; }
 .badge-HEALTH { background: #3a1a1a; color: #f78166; border: 1px solid #f7816644; }
