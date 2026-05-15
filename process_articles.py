@@ -20,6 +20,7 @@ RETENTION_DAYS = 7
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
 CATEGORY_TAGS = {
+    "NEWS": ["政治", "社会", "国際", "事件", "災害", "スポーツ", "文化", "生活"],
     "DEV": ["Python", "AI", "LLM", "Automation", "Infrastructure", "機械学習", "クラウド", "セキュリティ"],
     "ECON": ["Finance", "Investment", "GlobalAffairs", "Markets", "仮想通貨", "為替", "株式"],
     "HEALTH": ["Fitness", "Diet", "Lifestyle", "Wellness", "医療", "栄養", "メンタル"],
@@ -35,11 +36,19 @@ PROMPT_TEMPLATE = """
 カテゴリヒント: {category}
 記事URL: {url}
 
+カテゴリの定義:
+- NEWS: 一般ニュース（政治・社会・国際・事件・災害・スポーツ・文化など）
+- DEV: テクノロジー・AI・プログラミング・インフラ・セキュリティ
+- ECON: 経済・投資・金融・マーケット・ビジネス
+- HEALTH: 健康・医療・フィットネス・栄養・メンタル
+- THOUGHT: 哲学・科学・社会学・SF・倫理・未来
+- OTHER: 上記いずれにも属さないもの
+
 出力形式（JSONのみ、説明文不要）:
 {{
   "summary": "記事の内容を日本語で1〜2文に要約（英語記事も必ず日本語に翻訳して要約）",
   "tags": ["タグ1", "タグ2", "タグ3"],
-  "master_category": "{category}またはDEV/ECON/HEALTH/THOUGHT/OTHERのいずれか",
+  "master_category": "NEWS/DEV/ECON/HEALTH/THOUGHT/OTHERのいずれか",
   "score_interest": 0.0〜1.0の数値（フィードバック適合度推定）,
   "score_quality": 0.0〜1.0の数値（情報価値・信頼性）
 }}
