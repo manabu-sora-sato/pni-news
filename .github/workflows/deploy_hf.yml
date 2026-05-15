@@ -20,6 +20,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
 
       - name: Push to Hugging Face
         env:
@@ -28,4 +31,4 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote add hf https://cryuff:$HF_TOKEN@huggingface.co/spaces/cryuff/pni-news
-          git push hf main --force
+          git push hf `git subtree split --prefix . main`:refs/heads/main --force
