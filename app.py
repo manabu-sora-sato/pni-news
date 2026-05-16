@@ -166,3 +166,63 @@ with st.sidebar:
 
     st.markdown("---")
     st.caption("v3.6 | GitHub Actions + Gemini API")
+
+# ─── メインコンテンツ ─────────────────────────────────
+st.markdown(f"### {CATEGORY_LABELS.get(selected_category, selected_category)}")
+
+articles = load_articles(unread_only=unread_only, category=selected_category)
+
+if not articles:
+    st.info("📭 表示できる記事がありません。GitHub Actionsでフェッチを実行してください。")
+else:
+    st.caption(f"{len(articles)} 件表示中")
+
+    for article in articles:
+        article_id = article["article_id"]
+        category = article.get("master_category", "OTHER")
+        is_read = article.get("is_read", False)
+        tags = article.get("tags", [])
+        score = article.get("adjusted_score", article.get("final_score", 0.5))
+        is_fallback = article.get("is_fallback", False)
+
+        card_class = "news-card is-read" if is_read else "news-card"
+        badge_html = f'<span class="badge badge-{category}">{category}</span>'
+        if is_fallback:
+            badge_html += '<span class="badge badge-FB">RAW</span>'
+
+        tags_html = " ".join(f'<span class="tag">{t}</span>' for t in tags[:5])
+        score_pct = int(score * 100)
+        pub = article.get("published_at", "")[:10]
+        source = article.get("source", "")
+        meta = f'<span style="font-size:11px;color:#6e7681">{source} · {pub}</span>'
+
+        st.markdown(f"""
+        <div class="{card_class}">
+            {badge_html}
+            {meta}
+            <div class="article-title">
+                <a href="{article['url']}" target="_blank">{article.get('title','')}</a>
+            </div>
+            <div class="summary-text">{article.get('summary','')}</div>
+            {tags_html}
+            <div class="score-bar-wrap"><div class="score-bar" style="width:{score_pct}%"></div></div>
+            <span style="font-size:10px;color:#6e7681;font-family:monospace">score: {score:.3f}</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+        col1, col2, col3, col4 = st.columns([1, 1, 1, 6])
+        with col1:
+            if st.button("👍", key=f"like_{article_id}", help="興味あり（学習に使われます）"):
+                save_feedback(article_id, tags, category, "like")
+                mark_as_read(article_id)
+                st.rerun()
+        with col2:
+            if st.button("👎", key=f"dislike_{article_id}", help="興味なし（学習に使われます）"):
+                save_feedback(article_id, tags, category, "dislike")
+                mark_as_read(article_id)
+                st.rerun()
+        with col3:
+            if not is_read:
+                if st.button("✓", key=f"read_{article_id}", help="既読にする"):
+                    mark_as_read(article_id)
+                    st.rerun()
