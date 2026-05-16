@@ -9,7 +9,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-# ─── ページ設定（最初に呼ぶ）─────────────────────────────────
+from utils.data_loader import load_articles, mark_as_read, mark_all_as_read
+from utils.feedback import save_feedback, load_feedback
+
+# ─── ページ設定 ─────────────────────────────────
 st.set_page_config(
     page_title="PNI - パーソナル・ニュース・インテリジェンス",
     page_icon="📰",
@@ -17,27 +20,12 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-from utils.data_loader import load_articles, mark_as_read, mark_all_as_read
-from utils.feedback import save_feedback, load_feedback
-
-# ─── セッション初期化 ─────────────────────────────────
-if "read_ids" not in st.session_state:
-    st.session_state.read_ids = set()
-if "feedback_actions" not in st.session_state:
-    st.session_state.feedback_actions = {}
-if "articles_cache" not in st.session_state:
-    st.session_state.articles_cache = None
-if "cache_key" not in st.session_state:
-    st.session_state.cache_key = ""
-
 # ─── カスタムCSS ─────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap');
 
-html, body, [class*="css"] {
-    font-family: 'Noto Sans JP', sans-serif;
-}
+html, body, [class*="css"] { font-family: 'Noto Sans JP', sans-serif; }
 
 .news-card {
     background: #1a1a2e;
@@ -46,9 +34,7 @@ html, body, [class*="css"] {
     border-radius: 8px;
     padding: 14px 18px;
     margin-bottom: 10px;
-    transition: border-left-color 0.2s;
 }
-.news-card:hover { border-left-color: #e94560; }
 .news-card.is-read { opacity: 0.5; }
 
 .badge {
@@ -58,7 +44,6 @@ html, body, [class*="css"] {
     padding: 2px 8px;
     border-radius: 20px;
     font-family: 'JetBrains Mono', monospace;
-    letter-spacing: 0.05em;
     margin-right: 6px;
 }
 .badge-NEWS   { background: #1a2a3a; color: #79c0ff; border: 1px solid #79c0ff44; }
@@ -73,37 +58,19 @@ html, body, [class*="css"] {
 .score-bar { height: 4px; border-radius: 2px; background: linear-gradient(90deg, #0f3460, #e94560); }
 
 .tag {
-    display: inline-block;
-    font-size: 10px;
-    padding: 1px 6px;
-    border-radius: 4px;
-    background: #0d1117;
-    color: #8b949e;
-    border: 1px solid #30363d;
-    margin: 2px 2px 0 0;
+    display: inline-block; font-size: 10px; padding: 1px 6px;
+    border-radius: 4px; background: #0d1117; color: #8b949e;
+    border: 1px solid #30363d; margin: 2px 2px 0 0;
 }
 
-.summary-text {
-    font-size: 13px;
-    color: #c9d1d9;
-    line-height: 1.6;
-    margin: 6px 0 8px 0;
-}
+.summary-text { font-size: 13px; color: #c9d1d9; line-height: 1.6; margin: 6px 0 8px 0; }
 
-.article-title a {
-    font-size: 15px;
-    font-weight: 700;
-    color: #e6edf3;
-    text-decoration: none;
-}
+.article-title a { font-size: 15px; font-weight: 700; color: #e6edf3; text-decoration: none; }
 .article-title a:hover { color: #e94560; }
 
 .stat-box {
-    background: #161b22;
-    border: 1px solid #30363d;
-    border-radius: 8px;
-    padding: 12px 16px;
-    text-align: center;
+    background: #161b22; border: 1px solid #30363d;
+    border-radius: 8px; padding: 12px 16px; text-align: center;
 }
 .stat-num { font-size: 28px; font-weight: 700; color: #e6edf3; }
 .stat-label { font-size: 11px; color: #8b949e; margin-top: 2px; }
@@ -113,13 +80,8 @@ html, body, [class*="css"] {
 # ─── カテゴリ定数 ─────────────────────────────────
 CATEGORIES = ["ALL", "NEWS", "DEV", "ECON", "HEALTH", "THOUGHT", "OTHER"]
 CATEGORY_LABELS = {
-    "ALL": "🌐 すべて",
-    "NEWS": "📰 ニュース",
-    "DEV": "💻 テック",
-    "ECON": "📈 経済",
-    "HEALTH": "💪 健康",
-    "THOUGHT": "🧠 思想",
-    "OTHER": "📌 その他",
+    "ALL": "🌐 すべて", "NEWS": "📰 ニュース", "DEV": "💻 テック",
+    "ECON": "📈 経済", "HEALTH": "💪 健康", "THOUGHT": "🧠 思想", "OTHER": "📌 その他",
 }
 
 # ─── サイドバー ─────────────────────────────────
@@ -129,61 +91,34 @@ with st.sidebar:
     st.markdown("---")
 
     selected_category = st.radio(
-        "カテゴリ",
-        CATEGORIES,
+        "カテゴリ", CATEGORIES,
         format_func=lambda c: CATEGORY_LABELS.get(c, c),
     )
-
-    unread_only = st.toggle("未読のみ表示", value=False)
+    unread_only = st.toggle("未読のみ表示", value=True)
     st.markdown("---")
 
-    cache_key = f"{selected_category}_{unread_only}"
-    if st.session_state.articles_cache is None or st.session_state.cache_key != cache_key:
-        st.session_state.articles_cache = load_articles()
-        st.session_state.cache_key = cache_key
-
-    all_articles = st.session_state.articles_cache
-    unread_count = sum(
-        1 for a in all_articles
-        if not a.get("is_read", False) and a["article_id"] not in st.session_state.read_ids
-    )
+    all_articles = load_articles()
+    unread_count = sum(1 for a in all_articles if not a.get("is_read", False))
 
     try:
         fb = load_feedback()
-        liked_count = len(st.session_state.feedback_actions) + sum(
-            1 for f in fb if f["action"] == "like"
-        )
+        liked_count = sum(1 for f in fb if f["action"] == "like")
     except Exception:
-        liked_count = len(st.session_state.feedback_actions)
+        liked_count = 0
 
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown(f"""
-        <div class="stat-box">
-            <div class="stat-num">{len(all_articles)}</div>
-            <div class="stat-label">総記事数</div>
-        </div>""", unsafe_allow_html=True)
+        st.markdown(f'<div class="stat-box"><div class="stat-num">{len(all_articles)}</div><div class="stat-label">総記事数</div></div>', unsafe_allow_html=True)
     with col2:
-        st.markdown(f"""
-        <div class="stat-box">
-            <div class="stat-num">{unread_count}</div>
-            <div class="stat-label">未読</div>
-        </div>""", unsafe_allow_html=True)
+        st.markdown(f'<div class="stat-box"><div class="stat-num">{unread_count}</div><div class="stat-label">未読</div></div>', unsafe_allow_html=True)
 
-    st.markdown(f"""
-    <div class="stat-box" style="margin-top:8px">
-        <div class="stat-num">👍 {liked_count}</div>
-        <div class="stat-label">学習済みフィードバック</div>
-    </div>""", unsafe_allow_html=True)
+    st.markdown(f'<div class="stat-box" style="margin-top:8px"><div class="stat-num">👍 {liked_count}</div><div class="stat-label">学習済みフィードバック</div></div>', unsafe_allow_html=True)
 
     st.markdown("---")
-    st.markdown("#### 一括操作")
     if st.button("✅ 表示中を全既読"):
         articles_to_mark = load_articles(unread_only=unread_only, category=selected_category)
-        ids = [a["article_id"] for a in articles_to_mark]
-        mark_all_as_read(ids)
-        st.session_state.read_ids.update(ids)
-        st.session_state.articles_cache = None
+        mark_all_as_read([a["article_id"] for a in articles_to_mark])
+        st.rerun()
 
     st.markdown("---")
     st.caption("v3.6 | GitHub Actions + Gemini API")
@@ -194,20 +129,17 @@ st.markdown(f"### {CATEGORY_LABELS.get(selected_category, selected_category)}")
 articles = load_articles(unread_only=unread_only, category=selected_category)
 
 if not articles:
-    st.info("📭 表示できる記事がありません。GitHub Actionsでフェッチを実行してください。")
+    st.info("📭 表示できる記事がありません。")
 else:
     st.caption(f"{len(articles)} 件表示中")
 
     for article in articles:
         article_id = article["article_id"]
         category = article.get("master_category", "OTHER")
-        is_read = article.get("is_read", False) or article_id in st.session_state.read_ids
+        is_read = article.get("is_read", False)
         tags = article.get("tags", [])
         score = article.get("adjusted_score", article.get("final_score", 0.5))
         is_fallback = article.get("is_fallback", False)
-
-        if article_id in st.session_state.feedback_actions:
-            continue
 
         card_class = "news-card is-read" if is_read else "news-card"
         badge_html = f'<span class="badge badge-{category}">{category}</span>'
@@ -215,29 +147,19 @@ else:
             badge_html += '<span class="badge badge-FB">RAW</span>'
 
         tags_html = " ".join(f'<span class="tag">{t}</span>' for t in tags[:5])
-
         score_pct = int(score * 100)
-        score_bar = f"""
-        <div class="score-bar-wrap">
-            <div class="score-bar" style="width:{score_pct}%"></div>
-        </div>
-        <span style="font-size:10px;color:#6e7681;font-family:monospace">score: {score:.3f}</span>
-        """
-
         pub = article.get("published_at", "")[:10]
         source = article.get("source", "")
-        meta = f'<span style="font-size:11px;color:#6e7681">{source} · {pub}</span>'
 
         st.markdown(f"""
         <div class="{card_class}">
             {badge_html}
-            {meta}
-            <div class="article-title">
-                <a href="{article['url']}" target="_blank">{article.get('title','')}</a>
-            </div>
+            <span style="font-size:11px;color:#6e7681">{source} · {pub}</span>
+            <div class="article-title"><a href="{article['url']}" target="_blank">{article.get('title','')}</a></div>
             <div class="summary-text">{article.get('summary','')}</div>
             {tags_html}
-            {score_bar}
+            <div class="score-bar-wrap"><div class="score-bar" style="width:{score_pct}%"></div></div>
+            <span style="font-size:10px;color:#6e7681;font-family:monospace">score: {score:.3f}</span>
         </div>
         """, unsafe_allow_html=True)
 
@@ -246,16 +168,14 @@ else:
             if st.button("👍", key=f"like_{article_id}", help="興味あり"):
                 save_feedback(article_id, tags, category, "like")
                 mark_as_read(article_id)
-                st.session_state.read_ids.add(article_id)
-                st.session_state.feedback_actions[article_id] = "like"
+                st.rerun()
         with col2:
             if st.button("👎", key=f"dislike_{article_id}", help="興味なし"):
                 save_feedback(article_id, tags, category, "dislike")
                 mark_as_read(article_id)
-                st.session_state.read_ids.add(article_id)
-                st.session_state.feedback_actions[article_id] = "dislike"
+                st.rerun()
         with col3:
             if not is_read:
                 if st.button("✓", key=f"read_{article_id}", help="既読にする"):
                     mark_as_read(article_id)
-                    st.session_state.read_ids.add(article_id)
+                    st.rerun()
