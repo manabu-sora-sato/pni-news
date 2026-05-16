@@ -2,10 +2,8 @@
 data_loader.py - データ読み込みユーティリティ
 FALLBACK LOGIC: processed → raw の順で必ずデータを返す
 """
-
 import json
 from pathlib import Path
-from datetime import datetime, timezone
 from utils.feedback import adjust_score_by_feedback
 
 DATA_DIR = Path("data")
@@ -29,18 +27,11 @@ def load_jsonl(path: Path) -> list:
 
 
 def load_articles(unread_only: bool = False, category: str = None) -> list:
-    """
-    FALLBACK LOGIC:
-    1. processed_news から読み込み
-    2. 未処理のraw記事はフォールバック形式で追加
-    3. スコア降順でソート
-    """
     processed = load_jsonl(PROCESSED_FILE)
     raw = load_jsonl(RAW_FILE)
 
     processed_ids = {a["article_id"] for a in processed}
 
-    # raw のうち未処理のものをフォールバックとして追加
     for raw_article in raw:
         if raw_article["article_id"] not in processed_ids:
             fallback = {
@@ -51,7 +42,7 @@ def load_articles(unread_only: bool = False, category: str = None) -> list:
                 "source": raw_article.get("source", ""),
                 "source_lang": raw_article.get("source_lang", ""),
                 "master_category": raw_article.get("master_category", "OTHER"),
-                "summary": raw_article.get("title", ""),  # タイトルをsummaryに
+                "summary": raw_article.get("title", ""),
                 "tags": [raw_article.get("master_category", "OTHER")],
                 "score_interest": 0.3,
                 "score_quality": 0.3,
@@ -63,23 +54,20 @@ def load_articles(unread_only: bool = False, category: str = None) -> list:
             }
             processed.append(fallback)
 
-    # フィードバック学習スコア補正
     for article in processed:
         article["adjusted_score"] = adjust_score_by_feedback(article)
 
-    # フィルタ
     if unread_only:
         processed = [a for a in processed if not a.get("is_read", False)]
     if category and category != "ALL":
         processed = [a for a in processed if a.get("master_category") == category]
 
-    # スコア降順ソート
+    # 取得日時降順（新しい順）
     processed.sort(key=lambda x: x.get("published_at", ""), reverse=True)
-    return processed
+    return processed[:100]
 
 
 def mark_as_read(article_id: str):
-    """記事を既読にする（JSONL更新）"""
     if not PROCESSED_FILE.exists():
         return
     records = load_jsonl(PROCESSED_FILE)
@@ -93,7 +81,6 @@ def mark_as_read(article_id: str):
 
 
 def mark_all_as_read(article_ids: list):
-    """一括既読"""
     if not PROCESSED_FILE.exists():
         return
     records = load_jsonl(PROCESSED_FILE)
