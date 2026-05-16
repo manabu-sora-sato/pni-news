@@ -75,8 +75,7 @@ def load_articles(unread_only: bool = False, category: str = None) -> list:
 
     # スコア降順ソート
     processed.sort(key=lambda x: x.get("published_at", ""), reverse=True)
-
-    return processed
+    return processed[:50]
 
 
 def mark_as_read(article_id: str):
