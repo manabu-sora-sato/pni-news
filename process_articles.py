@@ -161,7 +161,7 @@ def process_all():
         return
 
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel("gemini-1.5-flash")  # 無料枠
+    model = genai.GenerativeModel("gemini-2.5-flash") # 無料枠
 
     processed_ids = load_processed_ids()
     raw_articles = load_raw_articles()
