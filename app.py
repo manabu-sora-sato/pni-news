@@ -165,4 +165,4 @@ with st.sidebar:
         st.rerun()
 
     st.markdown("---")
-    st.caption("v3.6 | GitHub Actions
+    st.caption("v3.6 | GitHub Actions + Gemini API")
