@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from utils.data_loader import load_articles, mark_as_read, mark_all_as_read
+from utils.data_loader import load_articles, mark_as_read, mark_all_as_read, count_articles
 from utils.feedback import save_feedback
 
 # ─── ページ設定 ─────────────────────────────────
@@ -127,8 +127,8 @@ with st.sidebar:
     unread_only = st.toggle("未読のみ表示", value=True)
     st.markdown("---")
 
-    all_articles = load_articles()
-    unread_count = sum(1 for a in all_articles if not a.get("is_read", False))
+    total_count = count_articles()
+    unread_count = count_articles(unread_only=True)
     liked_count = 0
     try:
         from utils.feedback import load_feedback
@@ -141,7 +141,7 @@ with st.sidebar:
     with col1:
         st.markdown(f"""
         <div class="stat-box">
-            <div class="stat-num">{len(all_articles)}</div>
+            <div class="stat-num">{total_count}</div>
             <div class="stat-label">総記事数</div>
         </div>""", unsafe_allow_html=True)
     with col2:
