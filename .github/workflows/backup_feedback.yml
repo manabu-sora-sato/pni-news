@@ -1,0 +1,31 @@
+name: Backup Feedback Data
+
+on:
+  schedule:
+    - cron: '0 */3 * * *'  # 3時間ごと
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download feedback from Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          curl -s -H "Authorization: Bearer $HF_TOKEN" \
+            "https://huggingface.co/spaces/cryuff/pni-news/resolve/main/data/user_feedback_log.jsonl" \
+            -o data/user_feedback_log.jsonl
+
+      - name: Commit and push feedback backup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/user_feedback_log.jsonl
+          git diff --staged --quiet || git commit -m "backup: feedback log $(date -u '+%Y-%m-%d %H:%M UTC')"
+          git push
