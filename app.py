@@ -191,7 +191,17 @@ else:
             badge_html += '<span class="badge badge-FB">RAW</span>'
 
         tags_html = " ".join(f'<span class="tag">{t}</span>' for t in tags[:5])
+
         score_pct = int(score * 100)
+        if score >= 0.70:
+            score_color = "#3fb950"  # 緑
+            score_label = "▲"
+        elif score >= 0.40:
+            score_color = "#d29922"  # 黄
+            score_label = "●"
+        else:
+            score_color = "#f85149"  # 赤
+            score_label = "▼"
         pub = article.get("published_at", "")[:10]
         source = article.get("source", "")
         meta = f'<span style="font-size:11px;color:#6e7681">{source} · {pub}</span>'
@@ -205,8 +215,8 @@ else:
             </div>
             <div class="summary-text">{article.get('summary','')}</div>
             {tags_html}
-            <div class="score-bar-wrap"><div class="score-bar" style="width:{score_pct}%"></div></div>
-            <span style="font-size:10px;color:#6e7681;font-family:monospace">score: {score:.3f}</span>
+            <div class="score-bar-wrap"><div class="score-bar" style="width:{score_pct}%;background:{score_color}"></div></div>
+            <span style="font-size:10px;color:{score_color};font-family:monospace">{score_label} score: {score:.3f}</span>
         </div>
         """, unsafe_allow_html=True)
 
