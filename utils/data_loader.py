@@ -26,6 +26,16 @@ def load_jsonl(path: Path) -> list:
     return records
 
 
+def count_articles(unread_only: bool = False, category: str = None) -> int:
+    """統計用カウント（軽量・全件対象）"""
+    processed = load_jsonl(PROCESSED_FILE)
+    if unread_only:
+        processed = [a for a in processed if not a.get("is_read", False)]
+    if category and category != "ALL":
+        processed = [a for a in processed if a.get("master_category") == category]
+    return len(processed)
+
+
 def load_articles(unread_only: bool = False, category: str = None) -> list:
     processed = load_jsonl(PROCESSED_FILE)
     raw = load_jsonl(RAW_FILE)
@@ -62,7 +72,6 @@ def load_articles(unread_only: bool = False, category: str = None) -> list:
     if category and category != "ALL":
         processed = [a for a in processed if a.get("master_category") == category]
 
-    # 取得日時降順（新しい順）
     processed.sort(key=lambda x: x.get("published_at", ""), reverse=True)
     return processed[:100]
 
