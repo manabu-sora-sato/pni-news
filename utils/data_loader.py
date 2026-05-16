@@ -74,7 +74,7 @@ def load_articles(unread_only: bool = False, category: str = None) -> list:
         processed = [a for a in processed if a.get("master_category") == category]
 
     # スコア降順ソート
-    processed.sort(key=lambda x: x.get("published_at", ""), reverse=False)
+    processed.sort(key=lambda x: x.get("published_at", ""), reverse=True)
     return processed
 
 
