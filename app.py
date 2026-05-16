@@ -97,7 +97,7 @@ with st.sidebar:
     unread_only = st.toggle("未読のみ表示", value=True)
     st.markdown("---")
 
-    all_articles = load_articles()
+    all_articles = load_articles(unread_only=unread_only, category=selected_category)
     unread_count = sum(1 for a in all_articles if not a.get("is_read", False))
 
     try:
