@@ -134,7 +134,7 @@ with st.sidebar:
         format_func=lambda c: CATEGORY_LABELS.get(c, c),
     )
 
-    unread_only = st.toggle("未読のみ表示", value=False)
+    unread_only = st.toggle("未読のみ表示", value=True)
     st.markdown("---")
 
     cache_key = f"{selected_category}_{unread_only}"
