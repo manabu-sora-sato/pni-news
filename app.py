@@ -1,6 +1,6 @@
 """
 app.py - Streamlit UI
-PNI: Personalized News Intelligence
+PNI: Personalized News Intelligence v3.6
 """
 
 import streamlit as st
@@ -9,18 +9,26 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from utils.data_loader import load_articles, mark_as_read, mark_all_as_read
-from utils.feedback import save_feedback
-
-
-
-# ─── ページ設定 ─────────────────────────────────
+# ─── ページ設定（最初に呼ぶ）─────────────────────────────────
 st.set_page_config(
     page_title="PNI - パーソナル・ニュース・インテリジェンス",
     page_icon="📰",
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+from utils.data_loader import load_articles, mark_as_read, mark_all_as_read
+from utils.feedback import save_feedback, load_feedback
+
+# ─── セッション初期化 ─────────────────────────────────
+if "read_ids" not in st.session_state:
+    st.session_state.read_ids = set()
+if "feedback_actions" not in st.session_state:
+    st.session_state.feedback_actions = {}
+if "articles_cache" not in st.session_state:
+    st.session_state.articles_cache = None
+if "cache_key" not in st.session_state:
+    st.session_state.cache_key = ""
 
 # ─── カスタムCSS ─────────────────────────────────
 st.markdown("""
@@ -31,7 +39,6 @@ html, body, [class*="css"] {
     font-family: 'Noto Sans JP', sans-serif;
 }
 
-/* カード */
 .news-card {
     background: #1a1a2e;
     border: 1px solid #16213e;
@@ -41,14 +48,9 @@ html, body, [class*="css"] {
     margin-bottom: 10px;
     transition: border-left-color 0.2s;
 }
-.news-card:hover {
-    border-left-color: #e94560;
-}
-.news-card.is-read {
-    opacity: 0.5;
-}
+.news-card:hover { border-left-color: #e94560; }
+.news-card.is-read { opacity: 0.5; }
 
-/* カテゴリバッジ */
 .badge {
     display: inline-block;
     font-size: 10px;
@@ -67,11 +69,9 @@ html, body, [class*="css"] {
 .badge-OTHER  { background: #2a2a2a; color: #8b949e; border: 1px solid #8b949e44; }
 .badge-FB     { background: #1a2a1a; color: #3fb950; border: 1px solid #3fb95044; }
 
-/* スコアバー */
 .score-bar-wrap { height: 4px; background: #0d1117; border-radius: 2px; margin: 6px 0 2px 0; }
 .score-bar { height: 4px; border-radius: 2px; background: linear-gradient(90deg, #0f3460, #e94560); }
 
-/* タグ */
 .tag {
     display: inline-block;
     font-size: 10px;
@@ -83,7 +83,6 @@ html, body, [class*="css"] {
     margin: 2px 2px 0 0;
 }
 
-/* サマリー */
 .summary-text {
     font-size: 13px;
     color: #c9d1d9;
@@ -91,7 +90,6 @@ html, body, [class*="css"] {
     margin: 6px 0 8px 0;
 }
 
-/* タイトル */
 .article-title a {
     font-size: 15px;
     font-weight: 700;
@@ -100,14 +98,6 @@ html, body, [class*="css"] {
 }
 .article-title a:hover { color: #e94560; }
 
-/* フォールバック表示 */
-.fallback-note {
-    font-size: 10px;
-    color: #6e7681;
-    font-style: italic;
-}
-
-/* 統計 */
 .stat-box {
     background: #161b22;
     border: 1px solid #30363d;
@@ -147,16 +137,24 @@ with st.sidebar:
     unread_only = st.toggle("未読のみ表示", value=False)
     st.markdown("---")
 
-    # 統計
-    all_articles = load_articles()
-    unread_count = sum(1 for a in all_articles if not a.get("is_read", False))
-    liked_count = 0
+    cache_key = f"{selected_category}_{unread_only}"
+    if st.session_state.articles_cache is None or st.session_state.cache_key != cache_key:
+        st.session_state.articles_cache = load_articles()
+        st.session_state.cache_key = cache_key
+
+    all_articles = st.session_state.articles_cache
+    unread_count = sum(
+        1 for a in all_articles
+        if not a.get("is_read", False) and a["article_id"] not in st.session_state.read_ids
+    )
+
     try:
-        from utils.feedback import load_feedback
         fb = load_feedback()
-        liked_count = sum(1 for f in fb if f["action"] == "like")
+        liked_count = len(st.session_state.feedback_actions) + sum(
+            1 for f in fb if f["action"] == "like"
+        )
     except Exception:
-        pass
+        liked_count = len(st.session_state.feedback_actions)
 
     col1, col2 = st.columns(2)
     with col1:
@@ -182,8 +180,10 @@ with st.sidebar:
     st.markdown("#### 一括操作")
     if st.button("✅ 表示中を全既読"):
         articles_to_mark = load_articles(unread_only=unread_only, category=selected_category)
-        mark_all_as_read([a["article_id"] for a in articles_to_mark])
-        st.rerun()
+        ids = [a["article_id"] for a in articles_to_mark]
+        mark_all_as_read(ids)
+        st.session_state.read_ids.update(ids)
+        st.session_state.articles_cache = None
 
     st.markdown("---")
     st.caption("v3.6 | GitHub Actions + Gemini API")
@@ -195,35 +195,27 @@ articles = load_articles(unread_only=unread_only, category=selected_category)
 
 if not articles:
     st.info("📭 表示できる記事がありません。GitHub Actionsでフェッチを実行してください。")
-    st.markdown("""
-    **初回セットアップ後の手順:**
-    1. リポジトリの Actions タブを開く
-    2. `Fetch RSS` ワークフローを手動実行
-    3. `Process Articles` ワークフローを手動実行
-    4. このページをリロード
-    """)
 else:
     st.caption(f"{len(articles)} 件表示中")
 
     for article in articles:
         article_id = article["article_id"]
         category = article.get("master_category", "OTHER")
-        is_read = article.get("is_read", False)
+        is_read = article.get("is_read", False) or article_id in st.session_state.read_ids
         tags = article.get("tags", [])
         score = article.get("adjusted_score", article.get("final_score", 0.5))
         is_fallback = article.get("is_fallback", False)
 
-        card_class = "news-card is-read" if is_read else "news-card"
+        if article_id in st.session_state.feedback_actions:
+            continue
 
-        # バッジHTML
+        card_class = "news-card is-read" if is_read else "news-card"
         badge_html = f'<span class="badge badge-{category}">{category}</span>'
         if is_fallback:
             badge_html += '<span class="badge badge-FB">RAW</span>'
 
-        # タグHTML
         tags_html = " ".join(f'<span class="tag">{t}</span>' for t in tags[:5])
 
-        # スコアバー
         score_pct = int(score * 100)
         score_bar = f"""
         <div class="score-bar-wrap">
@@ -232,7 +224,6 @@ else:
         <span style="font-size:10px;color:#6e7681;font-family:monospace">score: {score:.3f}</span>
         """
 
-        # ソース・日時
         pub = article.get("published_at", "")[:10]
         source = article.get("source", "")
         meta = f'<span style="font-size:11px;color:#6e7681">{source} · {pub}</span>'
@@ -250,20 +241,21 @@ else:
         </div>
         """, unsafe_allow_html=True)
 
-        # ボタン行
         col1, col2, col3, col4 = st.columns([1, 1, 1, 6])
         with col1:
-            if st.button("👍", key=f"like_{article_id}", help="興味あり（学習に使われます）"):
+            if st.button("👍", key=f"like_{article_id}", help="興味あり"):
                 save_feedback(article_id, tags, category, "like")
                 mark_as_read(article_id)
-                st.rerun()
+                st.session_state.read_ids.add(article_id)
+                st.session_state.feedback_actions[article_id] = "like"
         with col2:
-            if st.button("👎", key=f"dislike_{article_id}", help="興味なし（学習に使われます）"):
+            if st.button("👎", key=f"dislike_{article_id}", help="興味なし"):
                 save_feedback(article_id, tags, category, "dislike")
                 mark_as_read(article_id)
-                st.rerun()
+                st.session_state.read_ids.add(article_id)
+                st.session_state.feedback_actions[article_id] = "dislike"
         with col3:
             if not is_read:
                 if st.button("✓", key=f"read_{article_id}", help="既読にする"):
                     mark_as_read(article_id)
-                    st.rerun()
+                    st.session_state.read_ids.add(article_id)
