@@ -207,9 +207,8 @@ def process_all():
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
             new_processed.append(record)
 
-            # Gemini Free Tier: レート制限対策
-            if not is_fallback:
-                time.sleep(2)
+           # Gemini Free Tier: レート制限対策（2.5-flash: 5RPM = 12秒待機）
+            time.sleep(13)
 
     print(f"[process] done. processed: {len(new_processed)} articles")
 
