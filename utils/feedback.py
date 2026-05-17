@@ -88,3 +88,8 @@ def adjust_score_by_feedback(article: dict) -> float:
     raw_score = article.get("final_score", 0.5)
     adjusted = max(0.0, min(1.0, raw_score + tag_bonus + cat_bonus))
     return round(adjusted, 4)
+
+def _trigger_backup():
+    """バックグラウンドでGitHub Actionsのバックアップをトリガー"""
+    print(f"[backup] called, token exists: {bool(os.environ.get('GITHUB_TOKEN_READ', ''))}")
+    try:
