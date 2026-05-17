@@ -4,7 +4,6 @@ feedback.py - FEEDBACK LAYER
 """
 import json
 import os
-import threading
 import requests
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,7 +12,8 @@ DATA_DIR = Path("data")
 FEEDBACK_FILE = DATA_DIR / "user_feedback_log.jsonl"
 
 def _trigger_backup():
-    """バックグラウンドでGitHub Actionsのバックアップをトリガー"""
+    """GitHub Actionsのバックアップをトリガー"""
+    print(f"[backup] called, token exists: {bool(os.environ.get('GITHUB_TOKEN_READ', ''))}")
     try:
         token = os.environ.get("GITHUB_TOKEN_READ", "")
         if not token:
@@ -43,7 +43,6 @@ def save_feedback(article_id: str, tags: list, category: str, action: str):
     }
     with open(FEEDBACK_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
-    # バックアップをトリガー
     _trigger_backup()
 
 def load_feedback() -> list:
@@ -88,9 +87,3 @@ def adjust_score_by_feedback(article: dict) -> float:
     raw_score = article.get("final_score", 0.5)
     adjusted = max(0.0, min(1.0, raw_score + tag_bonus + cat_bonus))
     return round(adjusted, 4)
-
-def _trigger_backup():
-    """バックグラウンドでGitHub Actionsのバックアップをトリガー"""
-    print(f"[backup] called, token exists: {bool(os.environ.get('GITHUB_TOKEN_READ', ''))}")
-    try:
-        
