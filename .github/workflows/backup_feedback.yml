@@ -2,7 +2,7 @@ name: Backup Feedback Data
 
 on:
   schedule:
-    - cron: '0 */3 * * *'  # 3時間ごと
+    - cron: '*/10 * * * *'  # 10分ごと
   workflow_dispatch:
 
 jobs:
