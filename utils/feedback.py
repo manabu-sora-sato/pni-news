@@ -4,6 +4,7 @@ feedback.py - FEEDBACK LAYER
 """
 import json
 import os
+import base64
 import requests
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,26 +12,45 @@ from pathlib import Path
 DATA_DIR = Path("data")
 FEEDBACK_FILE = DATA_DIR / "user_feedback_log.jsonl"
 
-def _trigger_backup():
-    """GitHub Actionsのバックアップをトリガー"""
-    print(f"[backup] called, token exists: {bool(os.environ.get('GITHUB_TOKEN_READ', ''))}")
+GITHUB_REPO = "manabu-sora-sato/pni-news"
+GITHUB_FILE_PATH = "data/user_feedback_log.jsonl"
+
+def _save_to_github(content: str):
+    """GitHub APIでフィードバックファイルを直接更新"""
+    token = os.environ.get("GITHUB_TOKEN_READ", "")
+    if not token:
+        print("[github] GITHUB_TOKEN_READ not found")
+        return
+
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+
+    # 現在のファイルのSHAを取得
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
+    sha = None
     try:
-        token = os.environ.get("GITHUB_TOKEN_READ", "")
-        if not token:
-            print("[backup] GITHUB_TOKEN_READ not found")
-            return
-        response = requests.post(
-            "https://api.github.com/repos/manabu-sora-sato/pni-news/actions/workflows/backup_feedback.yml/dispatches",
-            headers={
-                "Authorization": f"token {token}",
-                "Accept": "application/vnd.github.v3+json",
-            },
-            json={"ref": "main"},
-            timeout=10,
-        )
-        print(f"[backup] trigger status: {response.status_code}")
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 200:
+            sha = r.json().get("sha")
     except Exception as e:
-        print(f"[backup] error: {e}")
+        print(f"[github] get sha error: {e}")
+        return
+
+    # ファイルを更新
+    try:
+        encoded = base64.b64encode(content.encode("utf-8")).decode("utf-8")
+        body = {
+            "message": f"backup: feedback {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
+            "content": encoded,
+        }
+        if sha:
+            body["sha"] = sha
+        r = requests.put(url, headers=headers, json=body, timeout=15)
+        print(f"[github] save status: {r.status_code}")
+    except Exception as e:
+        print(f"[github] save error: {e}")
 
 def save_feedback(article_id: str, tags: list, category: str, action: str):
     DATA_DIR.mkdir(exist_ok=True)
@@ -43,7 +63,10 @@ def save_feedback(article_id: str, tags: list, category: str, action: str):
     }
     with open(FEEDBACK_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
-    _trigger_backup()
+
+    # GitHubに直接保存
+    content = FEEDBACK_FILE.read_text(encoding="utf-8")
+    _save_to_github(content)
 
 def load_feedback() -> list:
     records = []
