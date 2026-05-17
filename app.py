@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from utils.data_loader import load_articles, mark_as_read, mark_all_as_read, count_articles
+from utils.data_loader import load_articles, mark_as_read, mark_all_as_read, count_articles, count_fallback_articles
 from utils.feedback import save_feedback
 
 def restore_feedback_from_github():
@@ -152,6 +152,7 @@ with st.sidebar:
 
     total_count = count_articles()
     unread_count = count_articles(unread_only=True)
+    fallback_count = count_fallback_articles()
     liked_count = 0
     try:
         from utils.feedback import load_feedback
@@ -179,6 +180,13 @@ with st.sidebar:
         <div class="stat-num">👍 {liked_count}</div>
         <div class="stat-label">学習済みフィードバック</div>
     </div>""", unsafe_allow_html=True)
+
+    if fallback_count > 0:
+        st.markdown(f"""
+        <div class="stat-box" style="margin-top:8px">
+            <div class="stat-num" style="color:#f85149">⚠️ {fallback_count}</div>
+            <div class="stat-label">未処理記事</div>
+        </div>""", unsafe_allow_html=True)
 
     st.markdown("---")
     st.markdown("#### 一括操作")
