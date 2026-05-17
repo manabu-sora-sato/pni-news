@@ -17,8 +17,9 @@ def _trigger_backup():
     try:
         token = os.environ.get("GITHUB_TOKEN_READ", "")
         if not token:
+            print("[backup] GITHUB_TOKEN_READ not found")
             return
-        requests.post(
+        response = requests.post(
             "https://api.github.com/repos/manabu-sora-sato/pni-news/actions/workflows/backup_feedback.yml/dispatches",
             headers={
                 "Authorization": f"token {token}",
@@ -27,8 +28,9 @@ def _trigger_backup():
             json={"ref": "main"},
             timeout=10,
         )
-    except Exception:
-        pass
+        print(f"[backup] trigger status: {response.status_code}")
+    except Exception as e:
+        print(f"[backup] error: {e}")
 
 def save_feedback(article_id: str, tags: list, category: str, action: str):
     DATA_DIR.mkdir(exist_ok=True)
