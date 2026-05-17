@@ -36,6 +36,10 @@ def count_articles(unread_only: bool = False, category: str = None) -> int:
     processed = [a for a in processed if not a.get("is_fallback", False)]
     return len(processed)
 
+def count_fallback_articles() -> int:
+    """未処理（fallback）記事のカウント"""
+    processed = load_jsonl(PROCESSED_FILE)
+    return sum(1 for a in processed if a.get("is_fallback", False))
 
 def load_articles(unread_only: bool = False, category: str = None) -> list:
     processed = load_jsonl(PROCESSED_FILE)
