@@ -218,10 +218,10 @@ else:
         score_pct = int(score * 100)
         if score >= 0.70:
             score_color = "#3fb950"
-            score_label = "▲"
+            score_label = "●"
         elif score >= 0.40:
             score_color = "#d29922"
-            score_label = "●"
+            score_label = "▲"
         else:
             score_color = "#f85149"
             score_label = "▼"
