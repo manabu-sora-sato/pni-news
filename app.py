@@ -245,9 +245,10 @@ else:
                 <a href="{article['url']}" target="_blank">{article.get('title','')}</a>
             </div>
             <div class="summary-text">{article.get('summary','')}</div>
-            {tags_html}
-            <div class="score-bar-wrap"><div class="score-bar" style="width:{score_pct}%;background:{score_color}"></div></div>
-            <span style="font-size:10px;color:{score_color};font-family:monospace">{score_label} score: {score:.3f}</span>
+            <div style="margin-top:4px">
+                {tags_html}
+                <span style="font-size:10px;color:{score_color};font-family:monospace;margin-left:6px">{score_label} {score:.3f}</span>
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
