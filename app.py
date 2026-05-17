@@ -3,6 +3,8 @@ app.py - Streamlit UI
 PNI: Personalized News Intelligence
 """
 
+import os
+import requests
 import streamlit as st
 import sys
 from pathlib import Path
@@ -11,6 +13,27 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from utils.data_loader import load_articles, mark_as_read, mark_all_as_read, count_articles
 from utils.feedback import save_feedback
+
+def restore_feedback_from_github():
+    """起動時にGitHubからフィードバックデータを復元"""
+    token = os.environ.get("GITHUB_TOKEN_READ", "")
+    if not token:
+        return
+    feedback_path = Path("data/user_feedback_log.jsonl")
+    feedback_path.parent.mkdir(exist_ok=True)
+    if feedback_path.exists() and feedback_path.stat().st_size > 0:
+        return
+    try:
+        url = "https://raw.githubusercontent.com/manabu-sora-sato/pni-news/main/data/user_feedback_log.jsonl"
+        headers = {"Authorization": f"token {token}"}
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            feedback_path.write_text(response.text, encoding="utf-8")
+            print(f"[restore] feedback restored: {len(response.text.splitlines())} records")
+    except Exception as e:
+        print(f"[restore] failed: {e}")
+
+restore_feedback_from_github()
 
 # ─── ページ設定 ─────────────────────────────────
 st.set_page_config(
@@ -194,13 +217,13 @@ else:
 
         score_pct = int(score * 100)
         if score >= 0.70:
-            score_color = "#3fb950"  # 緑
+            score_color = "#3fb950"
             score_label = "▲"
         elif score >= 0.40:
-            score_color = "#d29922"  # 黄
+            score_color = "#d29922"
             score_label = "●"
         else:
-            score_color = "#f85149"  # 赤
+            score_color = "#f85149"
             score_label = "▼"
         pub = article.get("published_at", "")[:10]
         source = article.get("source", "")
