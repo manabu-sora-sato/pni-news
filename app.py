@@ -156,7 +156,7 @@ with st.sidebar:
     try:
         from utils.feedback import load_feedback
         fb = load_feedback()
-        liked_count = sum(1 for f in fb if f["action"] == "like")
+        liked_count = len(fb)
     except Exception:
         pass
 
@@ -218,13 +218,13 @@ else:
         score_pct = int(score * 100)
         if score >= 0.70:
             score_color = "#3fb950"
-            score_label = "●"
+            score_label = "◎"
         elif score >= 0.40:
             score_color = "#d29922"
-            score_label = "▲"
+            score_label = "○"
         else:
             score_color = "#f85149"
-            score_label = "▼"
+            score_label = "△"
         pub = article.get("published_at", "")[:10]
         source = article.get("source", "")
         meta = f'<span style="font-size:11px;color:#6e7681">{source} · {pub}</span>'
