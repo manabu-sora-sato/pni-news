@@ -104,6 +104,30 @@ def purge_old_processed():
         f.write("\n".join(kept) + ("\n" if kept else ""))
     print(f"[purge] processed: kept {len(kept)} records")
 
+def remove_fallback_records():
+    """is_fallback: true の記事を削除して再処理対象にする"""
+    if not PROCESSED_FILE.exists():
+        return
+    records = []
+    removed = 0
+    with open(PROCESSED_FILE, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+                if record.get("is_fallback", False):
+                    removed += 1
+                else:
+                    records.append(line)
+            except Exception:
+                records.append(line)
+    with open(PROCESSED_FILE, "w", encoding="utf-8") as f:
+        f.write("\n".join(records) + ("\n" if records else ""))
+    print(f"[remove_fallback] removed {removed} fallback records")
+
+
 def calc_novelty(article_id: str, all_processed: list) -> float:
     """Novelty = 既処理済み数に基づく新規性スコア（ルールベース）"""
     total = len(all_processed)
@@ -155,6 +179,7 @@ def fallback_record(article: dict) -> dict:
 def process_all():
     DATA_DIR.mkdir(exist_ok=True)
     purge_old_processed()
+    remove_fallback_records()
 
     if not GEMINI_API_KEY:
         print("[ERROR] GEMINI_API_KEY が設定されていません")
