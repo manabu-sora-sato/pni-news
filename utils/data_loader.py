@@ -33,6 +33,7 @@ def count_articles(unread_only: bool = False, category: str = None) -> int:
         processed = [a for a in processed if not a.get("is_read", False)]
     if category and category != "ALL":
         processed = [a for a in processed if a.get("master_category") == category]
+    processed = [a for a in processed if not a.get("is_fallback", False)]
     return len(processed)
 
 
@@ -71,6 +72,8 @@ def load_articles(unread_only: bool = False, category: str = None) -> list:
         processed = [a for a in processed if not a.get("is_read", False)]
     if category and category != "ALL":
         processed = [a for a in processed if a.get("master_category") == category]
+    # fallback記事を除外
+    processed = [a for a in processed if not a.get("is_fallback", False)]
 
     processed.sort(key=lambda x: x.get("published_at", ""), reverse=True)
     return processed[:20]
