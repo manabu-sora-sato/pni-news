@@ -44,7 +44,7 @@ def save_feedback(article_id: str, tags: list, category: str, action: str):
     with open(FEEDBACK_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
     # バックグラウンドでバックアップをトリガー（速度に影響しない）
-    threading.Thread(target=_trigger_backup, daemon=True).start()
+    threading.Thread(target=_trigger_backup, daemon=False).start()
 
 def load_feedback() -> list:
     records = []
