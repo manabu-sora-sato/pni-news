@@ -79,6 +79,15 @@ def load_articles(unread_only: bool = False, category: str = None) -> list:
     # fallback記事を除外
     processed = [a for a in processed if not a.get("is_fallback", False)]
 
+    # フィードバック済み記事を除外
+    try:
+        from utils.feedback import load_feedback
+        fb = load_feedback()
+        fb_ids = {f["article_id"] for f in fb}
+        processed = [a for a in processed if a["article_id"] not in fb_ids]
+    except Exception:
+        pass
+
     processed.sort(key=lambda x: x.get("published_at", ""), reverse=True)
     return processed[:20]
 
