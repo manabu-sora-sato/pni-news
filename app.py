@@ -28,8 +28,11 @@ def restore_feedback_from_github():
         headers = {"Authorization": f"token {token}"}
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
-            feedback_path.write_text(response.text, encoding="utf-8")
-            print(f"[restore] feedback restored: {len(response.text.splitlines())} records")
+            # Entry not found などの無効な行を除外
+            lines = [l for l in response.text.splitlines() if l.strip().startswith("{")]
+            if lines:
+                feedback_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                print(f"[restore] feedback restored: {len(lines)} records")
     except Exception as e:
         print(f"[restore] failed: {e}")
 
