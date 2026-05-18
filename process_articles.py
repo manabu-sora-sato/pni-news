@@ -105,12 +105,11 @@ def purge_old_processed():
     print(f"[purge] processed: kept {len(kept)} records")
 
 def remove_fallback_records():
-    """7日以上前のis_fallback: true の記事を削除して再処理対象にする"""
+    """fallback記事を200件だけ残して古いものを削除"""
     if not PROCESSED_FILE.exists():
         return
-    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
-    records = []
-    removed = 0
+    records_non_fallback = []
+    records_fallback = []
     with open(PROCESSED_FILE, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -119,18 +118,21 @@ def remove_fallback_records():
             try:
                 record = json.loads(line)
                 if record.get("is_fallback", False):
-                    pub = datetime.fromisoformat(record.get("published_at", "2000-01-01T00:00:00+00:00"))
-                    if pub.tzinfo is None:
-                        pub = pub.replace(tzinfo=timezone.utc)
-                    if pub < cutoff:
-                        removed += 1
-                        continue
-                records.append(line)
+                    records_fallback.append(line)
+                else:
+                    records_non_fallback.append(line)
             except Exception:
-                records.append(line)
+                records_non_fallback.append(line)
+
+    # fallbackは新しい順に200件だけ残す
+    records_fallback.sort(key=lambda x: json.loads(x).get("published_at", ""), reverse=True)
+    kept_fallback = records_fallback[:200]
+    removed = len(records_fallback) - len(kept_fallback)
+
+    all_records = records_non_fallback + kept_fallback
     with open(PROCESSED_FILE, "w", encoding="utf-8") as f:
-        f.write("\n".join(records) + ("\n" if records else ""))
-    print(f"[remove_fallback] removed {removed} old fallback records")
+        f.write("\n".join(all_records) + ("\n" if all_records else ""))
+    print(f"[remove_fallback] removed {removed} fallback records, kept {len(kept_fallback)}")
 
 
 def calc_novelty(article_id: str, all_processed: list) -> float:
