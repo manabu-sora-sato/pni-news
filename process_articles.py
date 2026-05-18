@@ -105,9 +105,10 @@ def purge_old_processed():
     print(f"[purge] processed: kept {len(kept)} records")
 
 def remove_fallback_records():
-    """is_fallback: true の記事を削除して再処理対象にする"""
+    """7日以上前のis_fallback: true の記事を削除して再処理対象にする"""
     if not PROCESSED_FILE.exists():
         return
+    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
     records = []
     removed = 0
     with open(PROCESSED_FILE, "r", encoding="utf-8") as f:
@@ -118,14 +119,18 @@ def remove_fallback_records():
             try:
                 record = json.loads(line)
                 if record.get("is_fallback", False):
-                    removed += 1
-                else:
-                    records.append(line)
+                    pub = datetime.fromisoformat(record.get("published_at", "2000-01-01T00:00:00+00:00"))
+                    if pub.tzinfo is None:
+                        pub = pub.replace(tzinfo=timezone.utc)
+                    if pub < cutoff:
+                        removed += 1
+                        continue
+                records.append(line)
             except Exception:
                 records.append(line)
     with open(PROCESSED_FILE, "w", encoding="utf-8") as f:
         f.write("\n".join(records) + ("\n" if records else ""))
-    print(f"[remove_fallback] removed {removed} fallback records")
+    print(f"[remove_fallback] removed {removed} old fallback records")
 
 
 def calc_novelty(article_id: str, all_processed: list) -> float:
