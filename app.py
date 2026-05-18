@@ -58,7 +58,7 @@ html, body, [class*="css"] {
     border-left: 4px solid #0f3460;
     border-radius: 8px;
     padding: 14px 18px;
-    margin-bottom: 10px;
+    margin-bottom: 6px;
     transition: border-left-color 0.2s;
 }
 .news-card:hover { border-left-color: #e94560; }
@@ -82,9 +82,6 @@ html, body, [class*="css"] {
 .badge-OTHER  { background: #2a2a2a; color: #8b949e; border: 1px solid #8b949e44; }
 .badge-FB     { background: #1a2a1a; color: #3fb950; border: 1px solid #3fb95044; }
 
-.score-bar-wrap { height: 4px; background: #0d1117; border-radius: 2px; margin: 6px 0 2px 0; }
-.score-bar { height: 4px; border-radius: 2px; background: linear-gradient(90deg, #0f3460, #e94560); }
-
 .tag {
     display: inline-block;
     font-size: 10px;
@@ -100,7 +97,7 @@ html, body, [class*="css"] {
     font-size: 13px;
     color: #c9d1d9;
     line-height: 1.6;
-    margin: 6px 0 8px 0;
+    margin: 6px 0 4px 0;
 }
 
 .article-title a {
@@ -216,14 +213,12 @@ else:
         score = article.get("adjusted_score", article.get("final_score", 0.5))
         is_fallback = article.get("is_fallback", False)
 
-        card_class = "news-card is-read" if is_read else "news-card"
         badge_html = f'<span class="badge badge-{category}">{category}</span>'
         if is_fallback:
             badge_html += '<span class="badge badge-FB">RAW</span>'
 
         tags_html = " ".join(f'<span class="tag">{t}</span>' for t in tags[:5])
 
-        score_pct = int(score * 100)
         if score >= 0.70:
             score_color = "#3fb950"
             score_label = "◎"
@@ -233,38 +228,41 @@ else:
         else:
             score_color = "#f85149"
             score_label = "△"
+
         pub = article.get("published_at", "")[:10]
         source = article.get("source", "")
-        meta = f'<span style="font-size:11px;color:#6e7681">{source} · {pub}</span>'
 
-        st.markdown(f"""
-        <div class="{card_class}">
-            {badge_html}
-            {meta}
-            <div class="article-title">
-                <a href="{article['url']}" target="_blank">{article.get('title','')}</a>
-            </div>
-            <div class="summary-text">{article.get('summary','')}</div>
-            <div style="margin-top:4px">
-                {tags_html}
-                <span style="font-size:10px;color:{score_color};font-family:monospace;margin-left:6px">{score_label} {score:.3f}</span>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        # ボタン列（左）+ 記事内容列（右）
+        btn_col, content_col = st.columns([1, 10])
 
-        col1, col2, col3, col4 = st.columns([1, 1, 1, 6])
-        with col1:
-            if st.button("👍", key=f"like_{article_id}", help="興味あり（学習に使われます）"):
+        with btn_col:
+            st.markdown("<div style='padding-top:8px'>", unsafe_allow_html=True)
+            if st.button("👍", key=f"like_{article_id}", help="興味あり"):
                 save_feedback(article_id, tags, category, "like")
                 mark_as_read(article_id)
                 st.rerun()
-        with col2:
-            if st.button("👎", key=f"dislike_{article_id}", help="興味なし（学習に使われます）"):
+            if st.button("👎", key=f"dislike_{article_id}", help="興味なし"):
                 save_feedback(article_id, tags, category, "dislike")
                 mark_as_read(article_id)
                 st.rerun()
-        with col3:
             if not is_read:
                 if st.button("✓", key=f"read_{article_id}", help="既読にする"):
                     mark_as_read(article_id)
                     st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        with content_col:
+            st.markdown(f"""
+            <div class="news-card">
+                {badge_html}
+                <span style="font-size:11px;color:#6e7681">{source} · {pub}</span>
+                <div class="article-title">
+                    <a href="{article['url']}" target="_blank">{article.get('title','')}</a>
+                </div>
+                <div class="summary-text">{article.get('summary','')}</div>
+                <div style="margin-top:4px">
+                    {tags_html}
+                    <span style="font-size:10px;color:{score_color};font-family:monospace;margin-left:6px">{score_label} {score:.3f}</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
