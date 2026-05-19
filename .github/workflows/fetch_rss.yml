@@ -11,15 +11,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
-      # 1. 最初に最新のリポジトリ状態を取得
-      - name: Pull latest data
+      - name: Set git config
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull origin main
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -29,13 +25,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # 2. RSSを取得し、data/raw_news.jsonl に書き込み
       - name: Fetch RSS feeds
         run: python fetch_rss.py
 
-      # 3. 正しく raw_news.jsonl を指定してGitHubに保存
       - name: Commit and push raw data
         run: |
+          mkdir -p data
+          touch data/raw_news.jsonl
           git add data/raw_news.jsonl
           git diff --staged --quiet || git commit -m "chore: fetch rss data $(date -u '+%Y-%m-%d %H:%M UTC')"
-          git push origin main
+          git push
