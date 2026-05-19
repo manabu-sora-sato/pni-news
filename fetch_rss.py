@@ -1,6 +1,6 @@
 """
 fetch_rss.py - RAW LAYER
-RSS取得 → raw_news.jsonl に追記（7日保持）
+RSS取得 → raw_news.jsonl に追記（当日分のみ取得）
 """
 
 import feedparser
@@ -60,22 +60,26 @@ def purge_old_records():
         f.write("\n".join(kept) + ("\n" if kept else ""))
     print(f"[purge] {RAW_FILE}: kept {len(kept)} records")
 
-def parse_published(entry) -> str:
+def parse_published_datetime(entry) -> datetime:
+    """記事の公開日時をdatetimeオブジェクト（UTC）としてパースする"""
     try:
         import time
         t = entry.get("published_parsed") or entry.get("updated_parsed")
         if t:
-            dt = datetime(*t[:6], tzinfo=timezone.utc)
-            return dt.isoformat()
+            return datetime(*t[:6], tzinfo=timezone.utc)
     except Exception:
         pass
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(timezone.utc)
 
 def fetch_all():
     DATA_DIR.mkdir(exist_ok=True)
     feeds_config = load_feeds()
     existing_ids = load_existing_ids()
     new_count = 0
+
+    # 実行時点の日本時間 (JST) の日付（「今日」）を判定基準にする
+    JST = timezone(timedelta(hours=9))
+    today_jst = datetime.now(JST).date()
 
     with open(RAW_FILE, "a", encoding="utf-8") as f:
         for category, feeds in feeds_config.items():
@@ -90,14 +94,24 @@ def fetch_all():
                         link = entry.get("link", "")
                         if not link:
                             continue
+
+                        # 記事の公開日を判定し、日本時間 (JST) の日付に変換
+                        pub_dt = parse_published_datetime(entry)
+                        pub_date_jst = pub_dt.astimezone(JST).date()
+
+                        # 【新規追加】公開日が「今日」ではない古い記事はスキップ
+                        if pub_date_jst != today_jst:
+                            continue
+
                         article_id = make_article_id(link)
                         if article_id in existing_ids:
                             continue
+
                         record = {
                             "article_id": article_id,
                             "title": entry.get("title", ""),
                             "url": link,
-                            "published_at": parse_published(entry),
+                            "published_at": pub_dt.isoformat(),
                             "source": name,
                             "source_lang": lang,
                             "master_category": category,
