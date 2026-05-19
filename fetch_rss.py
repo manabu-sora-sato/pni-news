@@ -1,6 +1,6 @@
 """
 fetch_rss.py - RAW LAYER
-RSS取得 → raw_news.jsonl に追記（当日分のみ取得）
+RSS取得 → raw_news.jsonl に追記（過去24時間以内の記事のみ取得）
 """
 
 import feedparser
@@ -61,7 +61,7 @@ def purge_old_records():
     print(f"[purge] {RAW_FILE}: kept {len(kept)} records")
 
 def parse_published_datetime(entry) -> datetime:
-    """記事の公開日時をdatetimeオブジェクト（UTC）としてパースする"""
+    """記事の公開日時をdatetimeオブジェクト（UTC固定）として安全にパースする"""
     try:
         import time
         t = entry.get("published_parsed") or entry.get("updated_parsed")
@@ -69,6 +69,7 @@ def parse_published_datetime(entry) -> datetime:
             return datetime(*t[:6], tzinfo=timezone.utc)
     except Exception:
         pass
+    # パースできない場合は安全のため現在時刻（UTC）を返す
     return datetime.now(timezone.utc)
 
 def fetch_all():
@@ -77,9 +78,9 @@ def fetch_all():
     existing_ids = load_existing_ids()
     new_count = 0
 
-    # 実行時点の日本時間 (JST) の日付（「今日」）を判定基準にする
-    JST = timezone(timedelta(hours=9))
-    today_jst = datetime.now(JST).date()
+    # 【基準の変更】実行時の現在時刻（UTC）から過去24時間を計算
+    now_utc = datetime.now(timezone.utc)
+    time_threshold = now_utc - timedelta(hours=24)
 
     with open(RAW_FILE, "a", encoding="utf-8") as f:
         for category, feeds in feeds_config.items():
@@ -95,12 +96,11 @@ def fetch_all():
                         if not link:
                             continue
 
-                        # 記事の公開日を判定し、日本時間 (JST) の日付に変換
+                        # 記事の公開日時をUTCのdatetimeとして取得
                         pub_dt = parse_published_datetime(entry)
-                        pub_date_jst = pub_dt.astimezone(JST).date()
 
-                        # 【新規追加】公開日が「今日」ではない古い記事はスキップ
-                        if pub_date_jst != today_jst:
+                        # 【修正箇所】記事が過去24時間以内に公開されたものでなければスキップ
+                        if pub_dt < time_threshold:
                             continue
 
                         article_id = make_article_id(link)
@@ -115,7 +115,7 @@ def fetch_all():
                             "source": name,
                             "source_lang": lang,
                             "master_category": category,
-                            "fetched_at": datetime.now(timezone.utc).isoformat(),
+                            "fetched_at": now_utc.isoformat(),
                         }
                         f.write(json.dumps(record, ensure_ascii=False) + "\n")
                         existing_ids.add(article_id)
