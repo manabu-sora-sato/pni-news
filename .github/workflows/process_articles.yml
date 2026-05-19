@@ -17,8 +17,12 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      # 1. スクリプト実行前の「綺麗な状態」で先に最新データをプルする
       - name: Pull latest data
-        run: git pull origin main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull origin main
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -28,16 +32,15 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # 2. ここでスクリプトが走り、ファイルが更新される
       - name: Process articles with Gemini
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python process_articles.py
 
+      # 3. 競合のリスクがない状態で安全にコミット＆プッシュする（--rebaseは不要になります）
       - name: Commit and push processed data
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull origin main --rebase
           git add data/processed_news.jsonl
           git diff --staged --quiet || git commit -m "chore: process articles $(date -u '+%Y-%m-%d %H:%M UTC')"
           git push
