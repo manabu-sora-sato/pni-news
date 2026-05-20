@@ -1,27 +1,21 @@
-"""
-feedback.py - FEEDBACK LAYER
-👍/👎 永続保存・学習用スコア補正
-すべてのフィードバック（GOOD/BAD）をHFローカルの統合ファイルに一括保存し、スコアを計算します
-"""
 import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-DATA_DIR = Path("data")
-# すべてのアクションを管理する共通の統合ファイルを参照します
+# 絶対パスで固定
+DATA_DIR = Path(__file__).parent.parent / "data"
 ACTIONS_FILE = DATA_DIR / "user_actions.jsonl"
 
-
 def save_feedback(article_id: str, tags: list, category: str, action: str):
-    """
-    GOOD（like）/ BAD（dislike）アクションを統合ファイルにログ形式で即座に追記。
-    GitHubへのリアルタイムAPI送信は一切行いません。
-    """
-    DATA_DIR.mkdir(exist_ok=True)
+    # フォルダと空ファイルを強制的に物理生成
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if not ACTIONS_FILE.exists():
+        ACTIONS_FILE.touch()
+        
     record = {
         "article_id": article_id,
-        "action": action,  # "like" または "dislike"
+        "action": action,
         "category": category,
         "tags": tags,
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -29,11 +23,7 @@ def save_feedback(article_id: str, tags: list, category: str, action: str):
     with open(ACTIONS_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
-
 def load_feedback() -> list:
-    """
-    統合ファイルから GOOD/BAD（like/dislike）のレコードだけを抽出して返す（統計・スコア計算用）
-    """
     records = []
     if not ACTIONS_FILE.exists():
         return records
@@ -43,13 +33,11 @@ def load_feedback() -> list:
             if line:
                 try:
                     data = json.loads(line)
-                    # アクションが like または dislike のものだけをフィードバックとして扱う
                     if data.get("action") in ["like", "dislike"]:
                         records.append(data)
                 except Exception:
                     pass
     return records
-
 
 def get_tag_preference_scores() -> dict:
     feedback = load_feedback()
@@ -60,7 +48,6 @@ def get_tag_preference_scores() -> dict:
             scores[tag] = scores.get(tag, 0.0) + weight
     return scores
 
-
 def get_category_preference_scores() -> dict:
     feedback = load_feedback()
     scores = {}
@@ -70,9 +57,7 @@ def get_category_preference_scores() -> dict:
         scores[cat] = scores.get(cat, 0.0) + weight
     return scores
 
-
 def adjust_score_by_feedback(article: dict) -> float:
-    """統合ファイルから得られた傾向を元にスコアを補正（プラマイゼロの既読は影響なし）"""
     tag_scores = get_tag_preference_scores()
     cat_scores = get_category_preference_scores()
     tag_bonus = 0.0
