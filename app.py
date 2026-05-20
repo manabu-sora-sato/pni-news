@@ -7,6 +7,7 @@ import os
 import requests
 import streamlit as st
 import sys
+import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -161,6 +162,17 @@ CATEGORY_LABELS = {
 with st.sidebar:
     st.markdown("## 📰 PNI")
     st.markdown("**Personalized News Intelligence**")
+    
+    # ─── 最終取得日時の表示 ──────────────────
+    raw_path = Path("data/raw_news.jsonl")
+    if raw_path.exists():
+        mtime = raw_path.stat().st_mtime
+        last_fetch_dt = datetime.datetime.fromtimestamp(mtime)
+        last_fetch_str = last_fetch_dt.strftime("%m/%d %H:%M")
+        st.markdown(f"⏱️ **最終取得:** `{last_fetch_str}`")
+    else:
+        st.markdown("⏱️ **最終取得:** `---`")
+        
     st.markdown("---")
 
     selected_category = st.radio(
@@ -225,7 +237,7 @@ with st.sidebar:
         st.rerun()
 
     st.markdown("---")
-    st.caption("v3.6 | GitHub Actions + Gemini API")
+    st.caption("v3.6 | GitHub Actions")
 
 # ─── メインコンテンツ ─────────────────────────────────
 st.markdown(f"### {CATEGORY_LABELS.get(selected_category, selected_category)}")
