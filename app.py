@@ -218,6 +218,20 @@ st.markdown(f"### {CATEGORY_LABELS.get(selected_category, selected_category)}")
 total_matched_count = count_articles(unread_only=unread_only, category=selected_category)
 articles = load_articles(unread_only=unread_only, category=selected_category)
 
+# ─── 共通スコープのコールバック関数 ───
+def handle_action(action_type, aid, atags, acat):
+    if action_type == "like":
+        save_feedback(aid, atags, acat, "like")
+        mark_as_read(aid)
+    elif action_type == "dislike":
+        save_feedback(aid, atags, acat, "dislike")
+        mark_as_read(aid)
+    elif action_type == "read":
+        mark_as_read(aid)
+
+# ─── パス検証用テストコード ───
+st.write("実際の書き込み先パス:", str(Path(__file__).parent / "data" / "user_actions.jsonl"))
+
 if not articles:
     st.info("📭 表示できる記事がありません。GitHub Actionsでフェッチを実行してください。")
 else:
@@ -250,26 +264,15 @@ else:
         pub = article.get("published_at", "")[:10]
         source = article.get("source", "")
 
-        # ─── コールバック関数 ───
-        def handle_action(action_type, aid=article_id, atags=tags, acat=category):
-            if action_type == "like":
-                save_feedback(aid, atags, acat, "like")
-                mark_as_read(aid)
-            elif action_type == "dislike":
-                save_feedback(aid, atags, acat, "dislike")
-                mark_as_read(aid)
-            elif action_type == "read":
-                mark_as_read(aid)
-
         btn_col, content_col = st.columns([1, 10])
 
         with btn_col:
             st.markdown("<div style='padding-top:8px'>", unsafe_allow_html=True)
-            st.button("👍", key=f"like_{article_id}", help="興味あり", on_click=handle_action, args=("like",))
-            st.button("👎", key=f"dislike_{article_id}", help="興味なし", on_click=handle_action, args=("dislike",))
+            st.button("👍", key=f"like_{article_id}", help="興味あり", on_click=handle_action, args=("like", article_id, tags, category))
+            st.button("👎", key=f"dislike_{article_id}", help="興味なし", on_click=handle_action, args=("dislike", article_id, tags, category))
             
             if not is_read:
-                st.button("✓", key=f"read_{article_id}", help="既読にする", on_click=handle_action, args=("read",))
+                st.button("✓", key=f"read_{article_id}", help="既読にする", on_click=handle_action, args=("read", article_id, tags, category))
             st.markdown("</div>", unsafe_allow_html=True)
 
         with content_col:
