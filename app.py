@@ -208,38 +208,10 @@ with st.sidebar:
 # ─── メインコンテンツ ─────────────────────────────────
 st.markdown(f"### {CATEGORY_LABELS.get(selected_category, selected_category)}")
 
-# 選択された条件に一致する「全件」をカウントするため全データを一時マージ取得
-from utils.data_loader import load_jsonl, RAW_FILE, PROCESSED_FILE
-processed_list = load_jsonl(PROCESSED_FILE)
-raw_list = load_jsonl(RAW_FILE)
-processed_ids = {a["article_id"] for a in processed_list}
+# 選択された条件に一致する総件数をdata_loaderの正確なカウント関数から取得
+total_matched_count = count_articles(unread_only=unread_only, category=selected_category)
 
-full_list = list(processed_list)
-for raw_article in raw_list:
-    if raw_article["article_id"] not in processed_ids:
-        fallback = {
-            "article_id": raw_article["article_id"],
-            "master_category": raw_article.get("master_category", "OTHER"),
-            "is_read": False,
-        }
-        full_list.append(fallback)
-
-if unread_only:
-    full_list = [a for a in full_list if not a.get("is_read", False)]
-if selected_category and selected_category != "ALL":
-    full_list = [a for a in full_list if a.get("master_category") == selected_category]
-
-try:
-    from utils.feedback import load_feedback
-    fb = load_feedback()
-    fb_ids = {f["article_id"] for f in fb}
-    full_list = [a for a in full_list if a["article_id"] not in fb_ids]
-except Exception:
-    pass
-
-total_matched_count = len(full_list)
-
-# 画面に実際に表示する記事を取得（data_loader側のスライスが上限10件に適用されます）
+# 画面に実際に表示する記事を取得（上限10件）
 articles = load_articles(unread_only=unread_only, category=selected_category)
 
 if not articles:
