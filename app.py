@@ -229,8 +229,16 @@ def handle_action(action_type, aid, atags, acat):
     elif action_type == "read":
         mark_as_read(aid)
 
-# ─── パス検証用テストコード ───
-st.write("実際の書き込み先パス:", str(Path(__file__).parent / "data" / "user_actions.jsonl"))
+# ─── 修正箇所：内部ファイルを直接読み取って存在証明をする検証コード ───
+target_file = Path(__file__).parent / "data" / "user_actions.jsonl"
+if target_file.exists():
+    with open(target_file, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+    st.success(f"ファイル確認成功（全 {len(lines)} 行検出されました）")
+    st.code("".join(lines[-3:]), language="json")
+else:
+    st.warning("内部ファイルはまだ未生成です（ボタンを1回押してください）")
+
 
 if not articles:
     st.info("📭 表示できる記事がありません。GitHub Actionsでフェッチを実行してください。")
