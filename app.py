@@ -195,19 +195,25 @@ with st.sidebar:
         mark_all_as_read([a["article_id"] for a in articles_to_mark])
         st.rerun()
 
+    if st.button("👎 表示中を全BAD"):
+        articles_to_bad = load_articles(unread_only=unread_only, category=selected_category)
+        for a in articles_to_bad:
+            save_feedback(a["article_id"], a.get("tags", []), a.get("master_category", "OTHER"), "dislike")
+        mark_all_as_read([a["article_id"] for a in articles_to_bad])
+        st.rerun()
+
     st.markdown("---")
     st.caption("v3.6 | GitHub Actions + Gemini API")
 
 # ─── メインコンテンツ ─────────────────────────────────
 st.markdown(f"### {CATEGORY_LABELS.get(selected_category, selected_category)}")
 
-# 選択された条件（未読のみ、カテゴリ等）に一致する「全件」をカウントするため、上限なしの全データを一時取得
+# 選択された条件に一致する「全件」をカウントするため全データを一時マージ取得
 from utils.data_loader import load_jsonl, RAW_FILE, PROCESSED_FILE
 processed_list = load_jsonl(PROCESSED_FILE)
 raw_list = load_jsonl(RAW_FILE)
 processed_ids = {a["article_id"] for a in processed_list}
 
-# 未処理データをロードロジックと同等に補完
 full_list = list(processed_list)
 for raw_article in raw_list:
     if raw_article["article_id"] not in processed_ids:
@@ -223,7 +229,6 @@ if unread_only:
 if selected_category and selected_category != "ALL":
     full_list = [a for a in full_list if a.get("master_category") == selected_category]
 
-# フィードバック済み記事を除外
 try:
     from utils.feedback import load_feedback
     fb = load_feedback()
@@ -234,13 +239,12 @@ except Exception:
 
 total_matched_count = len(full_list)
 
-# 画面に実際に表示する上位20件を取得
+# 画面に実際に表示する記事を取得（data_loader側のスライスが上限10件に適用されます）
 articles = load_articles(unread_only=unread_only, category=selected_category)
 
 if not articles:
     st.info("📭 表示できる記事がありません。GitHub Actionsでフェッチを実行してください。")
 else:
-    # 選択条件における「表示件数 / 総件数」の形式に表示を修正
     st.caption(f"{len(articles)} / {total_matched_count} 件表示中")
 
     for article in articles:
@@ -270,7 +274,6 @@ else:
         pub = article.get("published_at", "")[:10]
         source = article.get("source", "")
 
-        # ボタン列（左）+ 記事内容列（右）
         btn_col, content_col = st.columns([1, 10])
 
         with btn_col:
