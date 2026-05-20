@@ -13,7 +13,8 @@ def sync_actions_to_github():
         print("[Sync] 送信するデータがありません。")
         return
 
-    github_token = os.getenv("GITHUB_TOKEN_READ")  # app.pyの記述と統一
+    # トークンの環境変数名を元の設定（GITHUB_TOKEN_READ）に厳密に統一します
+    github_token = os.getenv("GITHUB_TOKEN_READ")
     repo = "manabu-sora-sato/pni-news"
     
     if not github_token:
@@ -46,6 +47,7 @@ def sync_actions_to_github():
         if sha:
             payload["sha"] = sha
 
+        # この命令がGitHub側に届いた時点で、ファイルがなければ自動で新規作成（Create）されます
         put_res = requests.put(url, headers=headers, json=payload, timeout=15)
         if put_res.status_code in [200, 201]:
             print(f"[Sync] GitHubへの一方向バックアップに成功しました。: {put_res.status_code}")
