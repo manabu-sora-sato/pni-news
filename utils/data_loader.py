@@ -1,20 +1,20 @@
 """
-data_loader.py - データ読み込みユーティリティ
-FALLBACK LOGIC: processed → raw の順で必ずデータを返す
+data_loader.py - simplified version (RAW BASED)
+RSS → RAW表示 → feedback学習構造
 """
+
 import json
 from pathlib import Path
-from utils.feedback import adjust_score_by_feedback
 
 DATA_DIR = Path("data")
 RAW_FILE = DATA_DIR / "raw_news.jsonl"
-PROCESSED_FILE = DATA_DIR / "processed_news.jsonl"
 
 
 def load_jsonl(path: Path) -> list:
     records = []
     if not path.exists():
         return records
+
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -27,93 +27,64 @@ def load_jsonl(path: Path) -> list:
 
 
 def count_articles(unread_only: bool = False, category: str = None) -> int:
-    """統計用カウント（軽量・全件対象）"""
-    processed = load_jsonl(PROCESSED_FILE)
-    if unread_only:
-        processed = [a for a in processed if not a.get("is_read", False)]
+    articles = load_jsonl(RAW_FILE)
+
     if category and category != "ALL":
-        processed = [a for a in processed if a.get("master_category") == category]
-    processed = [a for a in processed if not a.get("is_fallback", False)]
-    return len(processed)
+        articles = [a for a in articles if a.get("master_category") == category]
+
+    if unread_only:
+        articles = [a for a in articles if not a.get("is_read", False)]
+
+    return len(articles)
+
 
 def count_fallback_articles() -> int:
-    """未処理（fallback）記事のカウント"""
-    processed = load_jsonl(PROCESSED_FILE)
-    return sum(1 for a in processed if a.get("is_fallback", False))
+    # RAW構造では未処理概念は廃止（互換のため0固定）
+    return 0
+
 
 def load_articles(unread_only: bool = False, category: str = None) -> list:
-    processed = load_jsonl(PROCESSED_FILE)
-    raw = load_jsonl(RAW_FILE)
+    articles = load_jsonl(RAW_FILE)
 
-    processed_ids = {a["article_id"] for a in processed}
-
-    for raw_article in raw:
-        if raw_article["article_id"] not in processed_ids:
-            fallback = {
-                "article_id": raw_article["article_id"],
-                "title": raw_article.get("title", ""),
-                "url": raw_article.get("url", ""),
-                "published_at": raw_article.get("published_at", ""),
-                "source": raw_article.get("source", ""),
-                "source_lang": raw_article.get("source_lang", ""),
-                "master_category": raw_article.get("master_category", "OTHER"),
-                "summary": raw_article.get("title", ""),
-                "tags": [raw_article.get("master_category", "OTHER")],
-                "score_interest": 0.3,
-                "score_quality": 0.3,
-                "score_novelty": 0.5,
-                "final_score": 0.37,
-                "is_fallback": True,
-                "is_read": False,
-                "processed_at": raw_article.get("fetched_at", ""),
-            }
-            processed.append(fallback)
-
-    for article in processed:
-        article["adjusted_score"] = adjust_score_by_feedback(article)
-
-    if unread_only:
-        processed = [a for a in processed if not a.get("is_read", False)]
+    # カテゴリフィルタ
     if category and category != "ALL":
-        processed = [a for a in processed if a.get("master_category") == category]
-    # fallback記事を除外
-    processed = [a for a in processed if not a.get("is_fallback", False)]
+        articles = [a for a in articles if a.get("master_category") == category]
 
-    # フィードバック済み記事を除外
+    # 既読フィルタ
+    if unread_only:
+        articles = [a for a in articles if not a.get("is_read", False)]
+
+    # フィードバック除外（学習済みは非表示）
     try:
         from utils.feedback import load_feedback
         fb = load_feedback()
         fb_ids = {f["article_id"] for f in fb}
-        processed = [a for a in processed if a["article_id"] not in fb_ids]
+        articles = [a for a in articles if a["article_id"] not in fb_ids]
     except Exception:
         pass
 
-    processed.sort(key=lambda x: x.get("published_at", ""), reverse=True)
-    return processed[:20]
+    # 既読フラグをUIに反映（重要）
+    try:
+        from utils.feedback import load_read_state
+        read_ids = load_read_state()
+        for a in articles:
+            a["is_read"] = a["article_id"] in read_ids
+    except Exception:
+        pass
+
+    # 並び順（新しい順）
+    articles.sort(key=lambda x: x.get("published_at", ""), reverse=True)
+
+    # ★ 表示件数制限（要件）
+    return articles[:10]
 
 
 def mark_as_read(article_id: str):
-    if not PROCESSED_FILE.exists():
-        return
-    records = load_jsonl(PROCESSED_FILE)
-    updated = []
-    for r in records:
-        if r["article_id"] == article_id:
-            r["is_read"] = True
-        updated.append(json.dumps(r, ensure_ascii=False))
-    with open(PROCESSED_FILE, "w", encoding="utf-8") as f:
-        f.write("\n".join(updated) + ("\n" if updated else ""))
+    from utils.feedback import add_read_state
+    add_read_state(article_id)
 
 
 def mark_all_as_read(article_ids: list):
-    if not PROCESSED_FILE.exists():
-        return
-    records = load_jsonl(PROCESSED_FILE)
-    id_set = set(article_ids)
-    updated = []
-    for r in records:
-        if r["article_id"] in id_set:
-            r["is_read"] = True
-        updated.append(json.dumps(r, ensure_ascii=False))
-    with open(PROCESSED_FILE, "w", encoding="utf-8") as f:
-        f.write("\n".join(updated) + ("\n" if updated else ""))
+    from utils.feedback import add_read_state
+    for aid in article_ids:
+        add_read_state(aid)
