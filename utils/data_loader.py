@@ -4,12 +4,13 @@ utils/data_loader.py - データ読み込み・既読管理ユーティリティ
 """
 import json
 import os
+import datetime
 from pathlib import Path
 from utils.feedback import adjust_score_by_feedback
 
-DATA_DIR = Path("data")
+# ─── 修正箇所：絶対パスに固定してコンテキストのズレを解消 ───
+DATA_DIR = Path(__file__).parent.parent / "data"
 RAW_FILE = DATA_DIR / "raw_news.jsonl"
-# すべてのユーザーアクション（read, like, dislike）をこの1つのファイルに統合します
 ACTIONS_FILE = DATA_DIR / "user_actions.jsonl"
 
 
@@ -24,7 +25,6 @@ def load_jsonl(path: Path) -> list:
                 try:
                     records.append(json.loads(line))
                 except Exception:
-                    # 万が一破損した行が混入しても、そこで止めずにスキップして読み込む
                     pass
     return records
 
@@ -134,10 +134,8 @@ def load_articles(unread_only: bool = False, category: str = None) -> list:
 def mark_as_read(article_id: str):
     """
     既読（✓）アクションをHFローカルの統合ファイルにログ形式で即座に追記。
-    GitHubへのリアルタイムAPI送信は行わない。
     """
-    import datetime
-    ACTIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
     
     new_record = {
         "article_id": article_id, 
@@ -153,8 +151,7 @@ def mark_all_as_read(article_ids: list):
     """
     一括既読アクションをHFローカルの統合ファイルにログ形式で即座に追記。
     """
-    import datetime
-    ACTIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
     
     timestamp = datetime.datetime.now().isoformat()
     updated = []
