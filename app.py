@@ -1,14 +1,3 @@
-このエラーは、`st.set_page_config()` よりも前に、Streamlitが「画面描画コマンド」として認識する処理が実行されてしまったために発生しています。
-
-原因は、私が `app.py` の修正案で、`st.set_page_config()` よりも上の行に `init_background_sync()` を配置し、その中で `st.cache_resource` を実行してしまったことです。Streamlitの仕様上、キャッシュ設定などの内部処理であっても、ページ設定より前に記述するとこのエラーが誘発されます。
-
-デザインや他のコードには一切触れず、**タイマーの起動位置だけを `st.set_page_config()` の直後に移動させた正しい `app.py` の全文コード**を提示します。
-
-これをGitHub側の `app.py` に上書き保存（コミット）してください。
-
-### `app.py` (修正版・全文)
-
-```python
 """
 app.py - Streamlit UI
 PNI: Personalized News Intelligence
@@ -291,5 +280,3 @@ else:
                 </div>
             </div>
             """, unsafe_allow_html=True)
-
-```
