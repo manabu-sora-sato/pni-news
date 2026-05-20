@@ -1,3 +1,14 @@
+このエラーは、`st.set_page_config()` よりも前に、Streamlitが「画面描画コマンド」として認識する処理が実行されてしまったために発生しています。
+
+原因は、私が `app.py` の修正案で、`st.set_page_config()` よりも上の行に `init_background_sync()` を配置し、その中で `st.cache_resource` を実行してしまったことです。Streamlitの仕様上、キャッシュ設定などの内部処理であっても、ページ設定より前に記述するとこのエラーが誘発されます。
+
+デザインや他のコードには一切触れず、**タイマーの起動位置だけを `st.set_page_config()` の直後に移動させた正しい `app.py` の全文コード**を提示します。
+
+これをGitHub側の `app.py` に上書き保存（コミット）してください。
+
+### `app.py` (修正版・全文)
+
+```python
 """
 app.py - Streamlit UI
 PNI: Personalized News Intelligence
@@ -18,6 +29,14 @@ from utils.data_loader import load_articles, mark_as_read, mark_all_as_read, cou
 from utils.feedback import save_feedback, load_feedback
 from utils.github_sync import sync_actions_to_github
 
+# ─── ページ設定（必ず最初に実行する） ───────────────────
+st.set_page_config(
+    page_title="PNI - パーソナル・ニュース・インテリジェンス",
+    page_icon="📰",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
 # ─── 1時間ごとの独立バックグラウンド同期タイマー ─────────────────
 @st.cache_resource
 def init_background_sync():
@@ -27,15 +46,8 @@ def init_background_sync():
     scheduler.start()
     return scheduler
 
+# ページ設定の直後でタイマーを起動
 init_background_sync()
-
-# ─── ページ設定 ─────────────────────────────────
-st.set_page_config(
-    page_title="PNI - パーソナル・ニュース・インテリジェンス",
-    page_icon="📰",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
 
 # ─── カスタムCSS ─────────────────────────────────
 st.markdown("""
@@ -279,3 +291,5 @@ else:
                 </div>
             </div>
             """, unsafe_allow_html=True)
+
+```
