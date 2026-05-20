@@ -3,12 +3,11 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-# 絶対パスで固定
-DATA_DIR = Path(__file__).parent.parent / "data"
+# ─── 修正箇所：権限エラーを避けるため、確実に書き込める /tmp 領域を指定 ───
+DATA_DIR = Path("/tmp/pni-data")
 ACTIONS_FILE = DATA_DIR / "user_actions.jsonl"
 
 def save_feedback(article_id: str, tags: list, category: str, action: str):
-    # フォルダと空ファイルを強制的に物理生成
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     if not ACTIONS_FILE.exists():
         ACTIONS_FILE.touch()
