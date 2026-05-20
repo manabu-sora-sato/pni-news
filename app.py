@@ -130,7 +130,7 @@ CATEGORY_LABELS = {
 # ─── サイドバー ─────────────────────────────────
 with st.sidebar:
     st.markdown("## 📰 PNI")
-    st.markdown("**Personalized News Intelligence**")
+    st.markdown("Personalized News Intelligence")
     
     # ─── 最終取得日時の表示 ──────────────────
     raw_path = Path("data/raw_news.jsonl")
@@ -138,9 +138,9 @@ with st.sidebar:
         mtime = raw_path.stat().st_mtime
         last_fetch_dt = datetime.datetime.fromtimestamp(mtime)
         last_fetch_str = last_fetch_dt.strftime("%m/%d %H:%M")
-        st.markdown(f"⏱️ **最終取得:** `{last_fetch_str}`")
+        st.markdown(f"⏱️ 最終取得: `{last_fetch_str}`")
     else:
-        st.markdown("⏱️ **最終取得:** `---`")
+        st.markdown("⏱️ 最終取得: `---`")
         
     st.markdown("---")
 
@@ -194,17 +194,20 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("#### 一括操作")
-    if st.button("✅ 表示中を全既読"):
-        articles_to_mark = load_articles(unread_only=unread_only, category=selected_category)
+    
+    # 一括操作のコールバック定義
+    def handle_bulk_read(cats=selected_category, unread=unread_only):
+        articles_to_mark = load_articles(unread_only=unread, category=cats)
         mark_all_as_read([a["article_id"] for a in articles_to_mark])
-        st.rerun()
 
-    if st.button("👎 表示中を全BAD"):
-        articles_to_bad = load_articles(unread_only=unread_only, category=selected_category)
+    def handle_bulk_bad(cats=selected_category, unread=unread_only):
+        articles_to_bad = load_articles(unread_only=unread, category=cats)
         for a in articles_to_bad:
             save_feedback(a["article_id"], a.get("tags", []), a.get("master_category", "OTHER"), "dislike")
         mark_all_as_read([a["article_id"] for a in articles_to_bad])
-        st.rerun()
+
+    st.button("✅ 表示中を全既読", on_click=handle_bulk_read)
+    st.button("👎 表示中を全BAD", on_click=handle_bulk_bad)
 
     st.markdown("---")
     st.caption("v3.6 | GitHub Actions")
@@ -247,22 +250,26 @@ else:
         pub = article.get("published_at", "")[:10]
         source = article.get("source", "")
 
+        # ─── コールバック関数 ───
+        def handle_action(action_type, aid=article_id, atags=tags, acat=category):
+            if action_type == "like":
+                save_feedback(aid, atags, acat, "like")
+                mark_as_read(aid)
+            elif action_type == "dislike":
+                save_feedback(aid, atags, acat, "dislike")
+                mark_as_read(aid)
+            elif action_type == "read":
+                mark_as_read(aid)
+
         btn_col, content_col = st.columns([1, 10])
 
         with btn_col:
             st.markdown("<div style='padding-top:8px'>", unsafe_allow_html=True)
-            if st.button("👍", key=f"like_{article_id}", help="興味あり"):
-                save_feedback(article_id, tags, category, "like")
-                mark_as_read(article_id)
-                st.rerun()
-            if st.button("👎", key=f"dislike_{article_id}", help="興味なし"):
-                save_feedback(article_id, tags, category, "dislike")
-                mark_as_read(article_id)
-                st.rerun()
+            st.button("👍", key=f"like_{article_id}", help="興味あり", on_click=handle_action, args=("like",))
+            st.button("👎", key=f"dislike_{article_id}", help="興味なし", on_click=handle_action, args=("dislike",))
+            
             if not is_read:
-                if st.button("✓", key=f"read_{article_id}", help="既読にする"):
-                    mark_as_read(article_id)
-                    st.rerun()
+                st.button("✓", key=f"read_{article_id}", help="既読にする", on_click=handle_action, args=("read",))
             st.markdown("</div>", unsafe_allow_html=True)
 
         with content_col:
