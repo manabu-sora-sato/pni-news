@@ -201,12 +201,47 @@ with st.sidebar:
 # ─── メインコンテンツ ─────────────────────────────────
 st.markdown(f"### {CATEGORY_LABELS.get(selected_category, selected_category)}")
 
+# 選択された条件（未読のみ、カテゴリ等）に一致する「全件」をカウントするため、上限なしの全データを一時取得
+from utils.data_loader import load_jsonl, RAW_FILE, PROCESSED_FILE
+processed_list = load_jsonl(PROCESSED_FILE)
+raw_list = load_jsonl(RAW_FILE)
+processed_ids = {a["article_id"] for a in processed_list}
+
+# 未処理データをロードロジックと同等に補完
+full_list = list(processed_list)
+for raw_article in raw_list:
+    if raw_article["article_id"] not in processed_ids:
+        fallback = {
+            "article_id": raw_article["article_id"],
+            "master_category": raw_article.get("master_category", "OTHER"),
+            "is_read": False,
+        }
+        full_list.append(fallback)
+
+if unread_only:
+    full_list = [a for a in full_list if not a.get("is_read", False)]
+if selected_category and selected_category != "ALL":
+    full_list = [a for a in full_list if a.get("master_category") == selected_category]
+
+# フィードバック済み記事を除外
+try:
+    from utils.feedback import load_feedback
+    fb = load_feedback()
+    fb_ids = {f["article_id"] for f in fb}
+    full_list = [a for a in full_list if a["article_id"] not in fb_ids]
+except Exception:
+    pass
+
+total_matched_count = len(full_list)
+
+# 画面に実際に表示する上位20件を取得
 articles = load_articles(unread_only=unread_only, category=selected_category)
 
 if not articles:
     st.info("📭 表示できる記事がありません。GitHub Actionsでフェッチを実行してください。")
 else:
-    st.caption(f"{len(articles)} 件表示中")
+    # 選択条件における「表示件数 / 総件数」の形式に表示を修正
+    st.caption(f"{len(articles)} / {total_matched_count} 件表示中")
 
     for article in articles:
         article_id = article["article_id"]
