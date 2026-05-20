@@ -1,312 +1,89 @@
-"""
-app.py - Streamlit UI
-PNI: Personalized News Intelligence
-"""
-
-import os
-import requests
 import streamlit as st
-import sys
-import datetime
+import json
 from pathlib import Path
+from utils.data_loader import ActionDataLoader
+from utils.github_sync import sync_actions_to_github
+from apscheduler.schedulers.background import BackgroundScheduler
 
-sys.path.insert(0, str(Path(__file__).parent))
+# ページ基本設定
+st.set_page_config(page_title="PNI News Reader", layout="wide")
 
-from utils.data_loader import load_articles, mark_as_read, mark_all_as_read, count_articles, count_fallback_articles
-from utils.feedback import save_feedback
+# 1. バックグラウンドタイマーの初期化（1時間ごとにGitHubへ送信）
+@st.cache_resource
+def init_background_sync():
+    scheduler = BackgroundScheduler()
+    # 1時間(60分)ごとにsync_actions_to_github関数を実行する
+    scheduler.add_job(sync_actions_to_github, 'interval', minutes=60)
+    scheduler.start()
+    return scheduler
 
-def restore_feedback_from_github():
-    """起動時にGitHubからフィードバックデータを復元"""
-    token = os.environ.get("GITHUB_TOKEN_READ", "")
-    if not token:
-        return
-    feedback_path = Path("data/user_feedback_log.jsonl")
-    feedback_path.parent.mkdir(exist_ok=True)
-    if feedback_path.exists() and feedback_path.stat().st_size > 0:
-        return
-    try:
-        url = "https://raw.githubusercontent.com/manabu-sora-sato/pni-news/main/data/user_feedback_log.jsonl"
-        headers = {"Authorization": f"token {token}"}
-        response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code == 200:
-            lines = [l for l in response.text.splitlines() if l.strip().startswith("{")]
-            if lines:
-                feedback_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-                print(f"[restore] feedback restored: {len(lines)} records")
-    except Exception as e:
-        print(f"[restore] failed: {e}")
+# タイマーを起動（Streamlitの再描画で二重起動しないようcache_resource化）
+init_background_sync()
 
-def restore_processed_from_github():
-    """起動時にGitHubから既読・処理済みステータスデータを復元"""
-    token = os.environ.get("GITHUB_TOKEN_READ", "")
-    if not token:
-        return
-    processed_path = Path("data/processed_news.jsonl")
-    processed_path.parent.mkdir(exist_ok=True)
-    if processed_path.exists() and processed_path.stat().st_size > 0:
-        return
-    try:
-        url = "https://raw.githubusercontent.com/manabu-sora-sato/pni-news/main/data/processed_news.jsonl"
-        headers = {"Authorization": f"token {token}"}
-        response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code == 200:
-            lines = [l for l in response.text.splitlines() if l.strip().startswith("{")]
-            if lines:
-                processed_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-                print(f"[restore] processed data restored: {len(lines)} records")
-    except Exception as e:
-        print(f"[restore] processed restore failed: {e}")
+# データローダーの呼び出し
+db = ActionDataLoader()
 
-# 起動時に両方のマスターデータをプル
-restore_feedback_from_github()
-restore_processed_from_github()
+# テスト用のダミーRSSニュースデータ（本来はRSSから読み込まれた news_list.jsonl 等を展開）
+# ※ 実際の環境に合わせて、ここのニュース読み込み元を設定してください
+def load_raw_news():
+    # 本来のニュースソースファイルを読み込む想定のプレースホルダー
+    # ここでは仮の構造を示しています
+    return [
+        {"article_id": "3fd158b12f01", "title": "上海 飲食店で傷害事件か 外務省...", "url": "https://example.com/1"},
+        {"article_id": "fde2081f330a", "title": "兵庫 たつの 住宅で親子の女性2人...", "url": "https://example.com/2"},
+        {"article_id": "82c95635f000", "title": "1〜3月のGDP 年率換算+2.1%...", "url": "https://example.com/3"}
+    ]
 
-# ─── ページ設定 ─────────────────────────────────
-st.set_page_config(
-    page_title="PNI - パーソナル・ニュース・インテリジェンス",
-    page_icon="📰",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+raw_articles = load_raw_news()
 
-# ─── カスタムCSS ─────────────────────────────────
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap');
+# 2. HFローカルの仕分けデータを読み込む
+processed_ids = db.load_processed_ids()
 
-html, body, [class*="css"] {
-    font-family: 'Noto Sans JP', sans-serif;
-}
+# 3. 画面に表示する未読ニュースのフィルタリング（HFローカルのデータのみを参照）
+display_articles = [a for a in raw_articles if a["article_id"] not in processed_ids]
 
-.news-card {
-    background: #1a1a2e;
-    border: 1px solid #16213e;
-    border-left: 4px solid #0f3460;
-    border-radius: 8px;
-    padding: 14px 18px;
-    margin-bottom: 6px;
-    transition: border-left-color 0.2s;
-}
-.news-card:hover { border-left-color: #e94560; }
-.news-card.is-read { opacity: 0.5; }
+# UIコンポーネントの描画
+st.title("PNI News Reader")
 
-.badge {
-    display: inline-block;
-    font-size: 10px;
-    font-weight: 700;
-    padding: 2px 8px;
-    border-radius: 20px;
-    font-family: 'JetBrains Mono', monospace;
-    letter-spacing: 0.05em;
-    margin-right: 6px;
-}
-.badge-NEWS   { background: #1a2a3a; color: #79c0ff; border: 1px solid #79c0ff44; }
-.badge-DEV    { background: #0f3460; color: #58a6ff; border: 1px solid #58a6ff44; }
-.badge-ECON   { background: #1a3a1a; color: #56d364; border: 1px solid #56d36444; }
-.badge-HEALTH { background: #3a1a1a; color: #f78166; border: 1px solid #f7816644; }
-.badge-THOUGHT{ background: #2a1a3a; color: #bc8cff; border: 1px solid #bc8cff44; }
-.badge-OTHER  { background: #2a2a2a; color: #8b949e; border: 1px solid #8b949e44; }
-.badge-FB     { background: #1a2a1a; color: #3fb950; border: 1px solid #3fb95044; }
+# カウンターや統計の表示
+counts = db.get_action_counts()
+st.sidebar.metric("未読件数", len(display_articles))
+st.sidebar.write(f"👍 GOOD: {counts['good']} 件")
+st.sidebar.write(f"👎 BAD: {counts['bad']} 件")
+st.sidebar.write(f"✓ 既読: {counts['read']} 件")
 
-.tag {
-    display: inline-block;
-    font-size: 10px;
-    padding: 1px 6px;
-    border-radius: 4px;
-    background: #0d1117;
-    color: #8b949e;
-    border: 1px solid #30363d;
-    margin: 2px 2px 0 0;
-}
+# 手動同期ボタン（動作確認用）
+if st.sidebar.button("今すぐGitHubにバックアップ"):
+    with st.spinner("送信中..."):
+        sync_actions_to_github()
+    st.sidebar.success("同期処理を要求しました（ログを確認してください）")
 
-.summary-text {
-    font-size: 13px;
-    color: #c9d1d9;
-    line-height: 1.6;
-    margin: 6px 0 4px 0;
-}
+st.write("---")
 
-.article-title a {
-    font-size: 15px;
-    font-weight: 700;
-    color: #e6edf3;
-    text-decoration: none;
-}
-.article-title a:hover { color: #e94560; }
-
-.stat-box {
-    background: #161b22;
-    border: 1px solid #30363d;
-    border-radius: 8px;
-    padding: 12px 16px;
-    text-align: center;
-}
-.stat-num { font-size: 28px; font-weight: 700; color: #e6edf3; }
-.stat-label { font-size: 11px; color: #8b949e; margin-top: 2px; }
-</style>
-""", unsafe_allow_html=True)
-
-# ─── カテゴリ定数 ─────────────────────────────────
-CATEGORIES = ["ALL", "NEWS", "DEV", "ECON", "HEALTH", "THOUGHT", "OTHER"]
-CATEGORY_LABELS = {
-    "ALL": "🌐 すべて",
-    "NEWS": "📰 ニュース",
-    "DEV": "💻 テック",
-    "ECON": "📈 経済",
-    "HEALTH": "💪 健康",
-    "THOUGHT": "🧠 思想",
-    "OTHER": "📌 その他",
-}
-
-# ─── サイドバー ─────────────────────────────────
-with st.sidebar:
-    st.markdown("## 📰 PNI")
-    st.markdown("**Personalized News Intelligence**")
-    
-    # ─── 最終取得日時の表示 ──────────────────
-    raw_path = Path("data/raw_news.jsonl")
-    if raw_path.exists():
-        mtime = raw_path.stat().st_mtime
-        last_fetch_dt = datetime.datetime.fromtimestamp(mtime)
-        last_fetch_str = last_fetch_dt.strftime("%m/%d %H:%M")
-        st.markdown(f"⏱️ **最終取得:** `{last_fetch_str}`")
-    else:
-        st.markdown("⏱️ **最終取得:** `---`")
-        
-    st.markdown("---")
-
-    selected_category = st.radio(
-        "カテゴリ",
-        CATEGORIES,
-        format_func=lambda c: CATEGORY_LABELS.get(c, c),
-    )
-
-    unread_only = st.toggle("未読のみ表示", value=True)
-    st.markdown("---")
-
-    total_count = count_articles()
-    unread_count = count_articles(unread_only=True)
-    fallback_count = count_fallback_articles()
-    liked_count = 0
-    try:
-        from utils.feedback import load_feedback
-        fb = load_feedback()
-        liked_count = len(fb)
-    except Exception:
-        pass
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown(f"""
-        <div class="stat-box">
-            <div class="stat-num">{total_count}</div>
-            <div class="stat-label">総記事数</div>
-        </div>""", unsafe_allow_html=True)
-    with col2:
-        st.markdown(f"""
-        <div class="stat-box">
-            <div class="stat-num">{unread_count}</div>
-            <div class="stat-label">未読</div>
-        </div>""", unsafe_allow_html=True)
-
-    st.markdown(f"""
-    <div class="stat-box" style="margin-top:8px">
-        <div class="stat-num">👍 {liked_count}</div>
-        <div class="stat-label">学習済みフィードバック</div>
-    </div>""", unsafe_allow_html=True)
-
-    if fallback_count > 0:
-        st.markdown(f"""
-        <div class="stat-box" style="margin-top:8px">
-            <div class="stat-num" style="color:#f85149">⚠️ {fallback_count}</div>
-            <div class="stat-label">未処理記事</div>
-        </div>""", unsafe_allow_html=True)
-
-    st.markdown("---")
-    st.markdown("#### 一括操作")
-    if st.button("✅ 表示中を全既読"):
-        articles_to_mark = load_articles(unread_only=unread_only, category=selected_category)
-        mark_all_as_read([a["article_id"] for a in articles_to_mark])
-        st.rerun()
-
-    if st.button("👎 表示中を全BAD"):
-        articles_to_bad = load_articles(unread_only=unread_only, category=selected_category)
-        for a in articles_to_bad:
-            save_feedback(a["article_id"], a.get("tags", []), a.get("master_category", "OTHER"), "dislike")
-        mark_all_as_read([a["article_id"] for a in articles_to_bad])
-        st.rerun()
-
-    st.markdown("---")
-    st.caption("v3.6 | GitHub Actions")
-
-# ─── メインコンテンツ ─────────────────────────────────
-st.markdown(f"### {CATEGORY_LABELS.get(selected_category, selected_category)}")
-
-total_matched_count = count_articles(unread_only=unread_only, category=selected_category)
-articles = load_articles(unread_only=unread_only, category=selected_category)
-
-if not articles:
-    st.info("📭 表示できる記事がありません。GitHub Actionsでフェッチを実行してください。")
+# ニュース一覧の表示
+if not display_articles:
+    st.info("未読のニュースはありません。すべて処理済みです。")
 else:
-    st.caption(f"{len(articles)} / {total_matched_count} 件表示中")
-
-    for article in articles:
-        article_id = article["article_id"]
-        category = article.get("master_category", "OTHER")
-        is_read = article.get("is_read", False)
-        tags = article.get("tags", [])
-        score = article.get("adjusted_score", article.get("final_score", 0.5))
-        is_fallback = article.get("is_fallback", False)
-
-        badge_html = f'<span class="badge badge-{category}">{category}</span>'
-        if is_fallback:
-            badge_html += '<span class="badge badge-FB">RAW</span>'
-
-        tags_html = " ".join(f'<span class="tag">{t}</span>' for t in tags[:5])
-
-        if score >= 0.70:
-            score_color = "#3fb950"
-            score_label = "◎"
-        elif score >= 0.40:
-            score_color = "#d29922"
-            score_label = "○"
-        else:
-            score_color = "#f85149"
-            score_label = "△"
-
-        pub = article.get("published_at", "")[:10]
-        source = article.get("source", "")
-
-        btn_col, content_col = st.columns([1, 10])
-
-        with btn_col:
-            st.markdown("<div style='padding-top:8px'>", unsafe_allow_html=True)
-            if st.button("👍", key=f"like_{article_id}", help="興味あり"):
-                save_feedback(article_id, tags, category, "like")
-                mark_as_read(article_id)
+    for article in display_articles:
+        a_id = article["article_id"]
+        
+        col1, col2, col3, col4 = st.columns([6, 1, 1, 1])
+        
+        with col1:
+            st.write(f"[{article['title']}]({article['url']})")
+            
+        with col2:
+            if st.button("👍 GOOD", key=f"good_{a_id}"):
+                db.save_action(a_id, "good")
                 st.rerun()
-            if st.button("👎", key=f"dislike_{article_id}", help="興味なし"):
-                save_feedback(article_id, tags, category, "dislike")
-                mark_as_read(article_id)
+                
+        with col3:
+            if st.button("👎 BAD", key=f"bad_{a_id}"):
+                db.save_action(a_id, "bad")
                 st.rerun()
-            if not is_read:
-                if st.button("✓", key=f"read_{article_id}", help="既読にする"):
-                    mark_as_read(article_id)
-                    st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        with content_col:
-            st.markdown(f"""
-            <div class="news-card">
-                {badge_html}
-                <span style="font-size:11px;color:#6e7681">{source} · {pub}</span>
-                <div class="article-title">
-                    <a href="{article['url']}" target="_blank">{article.get('title','')}</a>
-                </div>
-                <div class="summary-text">{article.get('summary','')}</div>
-                <div style="margin-top:4px">
-                    {tags_html}
-                    <span style="font-size:10px;color:{score_color};font-family:monospace;margin-left:6px">{score_label} {score:.3f}</span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+                
+        with col4:
+            if st.button("✓ 既読", key=f"read_{a_id}"):
+                db.save_action(a_id, "read")
+                st.rerun()
+        st.write("---")
