@@ -109,7 +109,7 @@ def load_articles(unread_only: bool = False, category: str = None) -> list:
         pass
 
     processed.sort(key=lambda x: x.get("published_at", ""), reverse=True)
-    return processed[:20]
+    return processed[:10]  # 一画面の最大表示件数を10件に変更しました
 
 
 def mark_as_read(article_id: str):
