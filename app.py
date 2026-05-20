@@ -44,7 +44,10 @@ st.set_page_config(
 )
 
 if "feedback_restored" not in st.session_state:
-    # restore_feedback_from_github()  ← 一旦コメントアウト
+    try:
+        restore_feedback_from_github()
+    except Exception as e:
+        print(f"[restore error] {e}")
     st.session_state["feedback_restored"] = True
 
 # ─── カスタムCSS ─────────────────────────────────
