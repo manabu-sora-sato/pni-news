@@ -6,7 +6,7 @@ from datetime import datetime
 # ===== 設定 =====
 RAW_FILE = "data/raw_news.jsonl"
 FEEDBACK_FILE = "data/user_feedback_log.jsonl"
-MAX_DISPLAY = 100
+MAX_DISPLAY = 10
 
 # ===== データ読み込み =====
 def load_raw_articles():
@@ -42,6 +42,8 @@ def save_feedback(article, feedback_type):
 st.set_page_config(page_title="PNI News", layout="wide")
 
 st.title("📰 PNI News (Raw Mode)")
+st.sidebar.title("メニュー")
+st.sidebar.write("（仮）フィルタは後で実装")
 
 st.markdown("AI未使用：全件表示 + Good/Bad収集")
 
