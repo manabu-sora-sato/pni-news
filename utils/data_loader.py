@@ -17,10 +17,8 @@ def load_articles(unread_only=True, category="ALL"):
             except:
                 continue
 
-            # デフォルト値（書き戻さない）
             a["is_read"] = a.get("is_read", False)
 
-            # フィルタ
             if unread_only and a["is_read"]:
                 continue
 
