@@ -24,6 +24,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# ─── 1時間ごとのリポジトリ自己同期タイマー ─────────────────
 @st.cache_resource
 def init_background_sync():
     scheduler = BackgroundScheduler()
@@ -33,6 +34,7 @@ def init_background_sync():
 
 init_background_sync()
 
+# ─── カスタムCSS ─────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap');
@@ -198,10 +200,25 @@ with st.sidebar:
     st.button("👎 表示中を全BAD", on_click=handle_bulk_bad)
 
     st.markdown("---")
-    st.caption("v3.7 | GitHub Actions")
+    
+    if st.button("🔄 今すぐリポジトリ同期を実行"):
+        with st.spinner("GitHubリポジトリへデータをプッシュ中..."):
+            sync_actions_to_github()
+        st.success("同期処理を呼び出しました。")
+
+    st.markdown("---")
+    st.caption("v3.9 | GitHub Actions")
 
 # ─── メインコンテンツ ─────────────────────────────────
 st.markdown(f"### {CATEGORY_LABELS.get(selected_category, selected_category)}")
+
+# ─── 現在地を特定するための検証表示コード ───
+target_file = Path("/tmp/pni-data/user_actions.jsonl")
+if target_file.exists():
+    file_size = target_file.stat().st_size
+    st.success(f"【最新版コード動的検証】ファイル存在確認: OK / サイズ: {file_size} bytes")
+else:
+    st.warning(f"【最新版コード動的検証】以下のターゲットパスにファイルがありません: {target_file.resolve()}")
 
 total_matched_count = count_articles(unread_only=unread_only, category=selected_category)
 articles = load_articles(unread_only=unread_only, category=selected_category)
@@ -213,19 +230,6 @@ def handle_action(action_type, aid, atags, acat):
         save_feedback(aid, atags, acat, "dislike")
     elif action_type == "read":
         mark_as_read(aid)
-
-# ─── メ力ニカルディスク検証コード ───
-target_file = Path(__file__).parent / "data" / "user_actions.jsonl"
-if target_file.exists():
-    file_size = target_file.stat().st_size
-    with open(target_file, "r", encoding="utf-8") as f:
-        lines = f.readlines()
-    
-    st.success(f"OS認識サイズ: {file_size} bytes / 検出行数: {len(lines)} 行")
-    st.code("".join(lines[-2:]), language="json")
-else:
-    st.warning("ファイルシステム上に存在しません")
-
 
 if not articles:
     st.info("📭 表示できる記事がありません。GitHub Actionsでフェッチを実行してください。")
