@@ -17,9 +17,10 @@ def load_articles(unread_only=True, category="ALL"):
             except:
                 continue
 
-            a["is_read"] = a.get("is_read", False)
+            # 読み取り専用（絶対に書き換えない）
+            is_read = a.get("is_read", False)
 
-            if unread_only and a["is_read"]:
+            if unread_only and is_read:
                 continue
 
             if category != "ALL" and a.get("master_category") != category:
