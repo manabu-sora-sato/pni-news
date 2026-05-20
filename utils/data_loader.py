@@ -17,12 +17,11 @@ def load_articles(unread_only=True, category="ALL"):
             except:
                 continue
 
-            # デフォルト値補完（※書き戻さないのが重要）
-            if "is_read" not in a:
-                a["is_read"] = False
+            # デフォルト値（書き戻さない）
+            a["is_read"] = a.get("is_read", False)
 
             # フィルタ
-            if unread_only and a.get("is_read", False):
+            if unread_only and a["is_read"]:
                 continue
 
             if category != "ALL" and a.get("master_category") != category:
@@ -46,9 +45,8 @@ def count_articles(unread_only=False):
             except:
                 continue
 
-            if unread_only:
-                if a.get("is_read", False):
-                    continue
+            if unread_only and a.get("is_read", False):
+                continue
 
             count += 1
 
