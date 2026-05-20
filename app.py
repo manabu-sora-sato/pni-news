@@ -28,7 +28,6 @@ def restore_feedback_from_github():
         headers = {"Authorization": f"token {token}"}
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
-            # Entry not found などの無効な行を除外
             lines = [l for l in response.text.splitlines() if l.strip().startswith("{")]
             if lines:
                 feedback_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -36,7 +35,30 @@ def restore_feedback_from_github():
     except Exception as e:
         print(f"[restore] failed: {e}")
 
+def restore_processed_from_github():
+    """起動時にGitHubから既読・処理済みステータスデータを復元"""
+    token = os.environ.get("GITHUB_TOKEN_READ", "")
+    if not token:
+        return
+    processed_path = Path("data/processed_news.jsonl")
+    processed_path.parent.mkdir(exist_ok=True)
+    if processed_path.exists() and processed_path.stat().st_size > 0:
+        return
+    try:
+        url = "https://raw.githubusercontent.com/manabu-sora-sato/pni-news/main/data/processed_news.jsonl"
+        headers = {"Authorization": f"token {token}"}
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            lines = [l for l in response.text.splitlines() if l.strip().startswith("{")]
+            if lines:
+                processed_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                print(f"[restore] processed data restored: {len(lines)} records")
+    except Exception as e:
+        print(f"[restore] processed restore failed: {e}")
+
+# 起動時に両方のマスターデータをプル
 restore_feedback_from_github()
+restore_processed_from_github()
 
 # ─── ページ設定 ─────────────────────────────────
 st.set_page_config(
@@ -208,10 +230,7 @@ with st.sidebar:
 # ─── メインコンテンツ ─────────────────────────────────
 st.markdown(f"### {CATEGORY_LABELS.get(selected_category, selected_category)}")
 
-# 選択された条件に一致する総件数をdata_loaderの正確なカウント関数から取得
 total_matched_count = count_articles(unread_only=unread_only, category=selected_category)
-
-# 画面に実際に表示する記事を取得（上限10件）
 articles = load_articles(unread_only=unread_only, category=selected_category)
 
 if not articles:
