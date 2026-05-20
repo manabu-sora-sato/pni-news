@@ -13,12 +13,10 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-# 一括管理化に伴い、読み書きはすべて共通のデータローダー（統合ファイル）に一元化します
 from utils.data_loader import load_articles, mark_as_read, mark_all_as_read, count_articles, count_fallback_articles
 from utils.feedback import save_feedback, load_feedback
 from utils.github_sync import sync_actions_to_github
 
-# ─── ページ設定（必ず最初に実行する） ───────────────────
 st.set_page_config(
     page_title="PNI - パーソナル・ニュース・インテリジェンス",
     page_icon="📰",
@@ -26,19 +24,15 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ─── 1時間ごとの独立バックグラウンド同期タイマー ─────────────────
 @st.cache_resource
 def init_background_sync():
     scheduler = BackgroundScheduler()
-    # ニュース取得(2時間)とは完全に切り離し、1時間(60分)ごとにGitHubへプッシュ
     scheduler.add_job(sync_actions_to_github, 'interval', minutes=60)
     scheduler.start()
     return scheduler
 
-# ページ設定の直後でタイマーを起動
 init_background_sync()
 
-# ─── カスタムCSS ─────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap');
@@ -115,7 +109,6 @@ html, body, [class*="css"] {
 </style>
 """, unsafe_allow_html=True)
 
-# ─── カテゴリ定数 ─────────────────────────────────
 CATEGORIES = ["ALL", "NEWS", "DEV", "ECON", "HEALTH", "THOUGHT", "OTHER"]
 CATEGORY_LABELS = {
     "ALL": "🌐 すべて",
@@ -127,12 +120,10 @@ CATEGORY_LABELS = {
     "OTHER": "📌 その他",
 }
 
-# ─── サイドバー ─────────────────────────────────
 with st.sidebar:
     st.markdown("## 📰 PNI")
     st.markdown("Personalized News Intelligence")
     
-    # ─── 最終取得日時の表示 ──────────────────
     raw_path = Path("data/raw_news.jsonl")
     if raw_path.exists():
         mtime = raw_path.stat().st_mtime
@@ -157,7 +148,6 @@ with st.sidebar:
     unread_count = count_articles(unread_only=True)
     fallback_count = count_fallback_articles()
     
-    # 手元の一括管理ファイルからフィードバック（GOOD/BAD数）を取得
     liked_count = 0
     try:
         fb = load_feedback()
@@ -195,7 +185,6 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("#### 一括操作")
     
-    # 一括操作のコールバック定義
     def handle_bulk_read(cats=selected_category, unread=unread_only):
         articles_to_mark = load_articles(unread_only=unread, category=cats)
         mark_all_as_read([a["article_id"] for a in articles_to_mark])
@@ -204,13 +193,12 @@ with st.sidebar:
         articles_to_bad = load_articles(unread_only=unread, category=cats)
         for a in articles_to_bad:
             save_feedback(a["article_id"], a.get("tags", []), a.get("master_category", "OTHER"), "dislike")
-        mark_all_as_read([a["article_id"] for a in articles_to_bad])
 
     st.button("✅ 表示中を全既読", on_click=handle_bulk_read)
     st.button("👎 表示中を全BAD", on_click=handle_bulk_bad)
 
     st.markdown("---")
-    st.caption("v3.6 | GitHub Actions")
+    st.caption("v3.7 | GitHub Actions")
 
 # ─── メインコンテンツ ─────────────────────────────────
 st.markdown(f"### {CATEGORY_LABELS.get(selected_category, selected_category)}")
@@ -218,26 +206,25 @@ st.markdown(f"### {CATEGORY_LABELS.get(selected_category, selected_category)}")
 total_matched_count = count_articles(unread_only=unread_only, category=selected_category)
 articles = load_articles(unread_only=unread_only, category=selected_category)
 
-# ─── 共通スコープのコールバック関数 ───
 def handle_action(action_type, aid, atags, acat):
     if action_type == "like":
         save_feedback(aid, atags, acat, "like")
-        mark_as_read(aid)
     elif action_type == "dislike":
         save_feedback(aid, atags, acat, "dislike")
-        mark_as_read(aid)
     elif action_type == "read":
         mark_as_read(aid)
 
-# ─── 修正箇所：内部ファイルを直接読み取って存在証明をする検証コード ───
+# ─── メ力ニカルディスク検証コード ───
 target_file = Path(__file__).parent / "data" / "user_actions.jsonl"
 if target_file.exists():
+    file_size = target_file.stat().st_size
     with open(target_file, "r", encoding="utf-8") as f:
         lines = f.readlines()
-    st.success(f"ファイル確認成功（全 {len(lines)} 行検出されました）")
-    st.code("".join(lines[-3:]), language="json")
+    
+    st.success(f"OS認識サイズ: {file_size} bytes / 検出行数: {len(lines)} 行")
+    st.code("".join(lines[-2:]), language="json")
 else:
-    st.warning("内部ファイルはまだ未生成です（ボタンを1回押してください）")
+    st.warning("ファイルシステム上に存在しません")
 
 
 if not articles:
