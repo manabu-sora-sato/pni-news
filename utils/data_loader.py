@@ -17,7 +17,6 @@ def load_articles(unread_only=True, category="ALL"):
             except:
                 continue
 
-            # 読み取り専用（絶対に書き換えない）
             is_read = a.get("is_read", False)
 
             if unread_only and is_read:
