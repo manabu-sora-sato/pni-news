@@ -1,86 +1,55 @@
 """
 feedback.py - FEEDBACK LAYER
 👍/👎 永続保存・学習用スコア補正
+すべてのフィードバック（GOOD/BAD）をHFローカルの統合ファイルに一括保存し、スコアを計算します
 """
 import json
 import os
-import base64
-import requests
 from datetime import datetime, timezone
 from pathlib import Path
 
 DATA_DIR = Path("data")
-FEEDBACK_FILE = DATA_DIR / "user_feedback_log.jsonl"
+# すべてのアクションを管理する共通の統合ファイルを参照します
+ACTIONS_FILE = DATA_DIR / "user_actions.jsonl"
 
-GITHUB_REPO = "manabu-sora-sato/pni-news"
-GITHUB_FILE_PATH = "data/user_feedback_log.jsonl"
-
-def _save_to_github(content: str):
-    """GitHub APIでフィードバックファイルを直接更新"""
-    token = os.environ.get("GITHUB_TOKEN_READ", "")
-    if not token:
-        print("[github] GITHUB_TOKEN_READ not found")
-        return
-
-    headers = {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json",
-    }
-
-    # 現在のファイルのSHAを取得
-    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
-    sha = None
-    try:
-        r = requests.get(url, headers=headers, timeout=10)
-        if r.status_code == 200:
-            sha = r.json().get("sha")
-    except Exception as e:
-        print(f"[github] get sha error: {e}")
-        return
-
-    # ファイルを更新
-    try:
-        encoded = base64.b64encode(content.encode("utf-8")).decode("utf-8")
-        body = {
-            "message": f"backup: feedback {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
-            "content": encoded,
-        }
-        if sha:
-            body["sha"] = sha
-        r = requests.put(url, headers=headers, json=body, timeout=15)
-        print(f"[github] save status: {r.status_code}")
-    except Exception as e:
-        print(f"[github] save error: {e}")
 
 def save_feedback(article_id: str, tags: list, category: str, action: str):
+    """
+    GOOD（like）/ BAD（dislike）アクションを統合ファイルにログ形式で即座に追記。
+    GitHubへのリアルタイムAPI送信は一切行いません。
+    """
     DATA_DIR.mkdir(exist_ok=True)
     record = {
         "article_id": article_id,
-        "tags": tags,
+        "action": action,  # "like" または "dislike"
         "category": category,
-        "action": action,
+        "tags": tags,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
-    with open(FEEDBACK_FILE, "a", encoding="utf-8") as f:
+    with open(ACTIONS_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
-    # GitHubに直接保存
-    content = FEEDBACK_FILE.read_text(encoding="utf-8")
-    _save_to_github(content)
 
 def load_feedback() -> list:
+    """
+    統合ファイルから GOOD/BAD（like/dislike）のレコードだけを抽出して返す（統計・スコア計算用）
+    """
     records = []
-    if not FEEDBACK_FILE.exists():
+    if not ACTIONS_FILE.exists():
         return records
-    with open(FEEDBACK_FILE, "r", encoding="utf-8") as f:
+    with open(ACTIONS_FILE, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:
                 try:
-                    records.append(json.loads(line))
+                    data = json.loads(line)
+                    # アクションが like または dislike のものだけをフィードバックとして扱う
+                    if data.get("action") in ["like", "dislike"]:
+                        records.append(data)
                 except Exception:
                     pass
     return records
+
 
 def get_tag_preference_scores() -> dict:
     feedback = load_feedback()
@@ -91,6 +60,7 @@ def get_tag_preference_scores() -> dict:
             scores[tag] = scores.get(tag, 0.0) + weight
     return scores
 
+
 def get_category_preference_scores() -> dict:
     feedback = load_feedback()
     scores = {}
@@ -100,7 +70,9 @@ def get_category_preference_scores() -> dict:
         scores[cat] = scores.get(cat, 0.0) + weight
     return scores
 
+
 def adjust_score_by_feedback(article: dict) -> float:
+    """統合ファイルから得られた傾向を元にスコアを補正（プラマイゼロの既読は影響なし）"""
     tag_scores = get_tag_preference_scores()
     cat_scores = get_category_preference_scores()
     tag_bonus = 0.0
