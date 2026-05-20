@@ -1,6 +1,6 @@
 """
 app.py - Streamlit UI
-PNI: Personalized News Intelligence
+PNI: Personalized News Intelligence（RAW表示・フィードバック記録モード）
 """
 
 import os
@@ -11,8 +11,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from utils.data_loader import load_articles, mark_as_read, mark_all_as_read, count_articles, count_fallback_articles
-from utils.feedback import save_feedback
+from utils.data_loader import load_articles, mark_as_read, count_articles
+from utils.feedback import save_feedback, load_feedback
+
 
 def restore_feedback_from_github():
     """起動時にGitHubからフィードバックデータを復元"""
@@ -28,11 +29,9 @@ def restore_feedback_from_github():
         headers = {"Authorization": f"token {token}"}
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
-            # Entry not found などの無効な行を除外
             lines = [l for l in response.text.splitlines() if l.strip().startswith("{")]
             if lines:
                 feedback_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-                print(f"[restore] feedback restored: {len(lines)} records")
     except Exception as e:
         print(f"[restore] failed: {e}")
 
@@ -83,25 +82,6 @@ html, body, [class*="css"] {
 .badge-HEALTH { background: #3a1a1a; color: #f78166; border: 1px solid #f7816644; }
 .badge-THOUGHT{ background: #2a1a3a; color: #bc8cff; border: 1px solid #bc8cff44; }
 .badge-OTHER  { background: #2a2a2a; color: #8b949e; border: 1px solid #8b949e44; }
-.badge-FB     { background: #1a2a1a; color: #3fb950; border: 1px solid #3fb95044; }
-
-.tag {
-    display: inline-block;
-    font-size: 10px;
-    padding: 1px 6px;
-    border-radius: 4px;
-    background: #0d1117;
-    color: #8b949e;
-    border: 1px solid #30363d;
-    margin: 2px 2px 0 0;
-}
-
-.summary-text {
-    font-size: 13px;
-    color: #c9d1d9;
-    line-height: 1.6;
-    margin: 6px 0 4px 0;
-}
 
 .article-title a {
     font-size: 15px;
@@ -152,14 +132,13 @@ with st.sidebar:
 
     total_count = count_articles()
     unread_count = count_articles(unread_only=True)
-    fallback_count = count_fallback_articles()
-    liked_count = 0
+
     try:
-        from utils.feedback import load_feedback
         fb = load_feedback()
-        liked_count = len(fb)
+        liked_count = sum(1 for f in fb if f.get("action") == "like")
+        disliked_count = sum(1 for f in fb if f.get("action") == "dislike")
     except Exception:
-        pass
+        liked_count = disliked_count = 0
 
     col1, col2 = st.columns(2)
     with col1:
@@ -175,28 +154,30 @@ with st.sidebar:
             <div class="stat-label">未読</div>
         </div>""", unsafe_allow_html=True)
 
-    st.markdown(f"""
-    <div class="stat-box" style="margin-top:8px">
-        <div class="stat-num">👍 {liked_count}</div>
-        <div class="stat-label">学習済みフィードバック</div>
-    </div>""", unsafe_allow_html=True)
-
-    if fallback_count > 0:
+    col3, col4 = st.columns(2)
+    with col3:
         st.markdown(f"""
         <div class="stat-box" style="margin-top:8px">
-            <div class="stat-num" style="color:#f85149">⚠️ {fallback_count}</div>
-            <div class="stat-label">未処理記事</div>
+            <div class="stat-num" style="color:#3fb950">👍 {liked_count}</div>
+            <div class="stat-label">good</div>
+        </div>""", unsafe_allow_html=True)
+    with col4:
+        st.markdown(f"""
+        <div class="stat-box" style="margin-top:8px">
+            <div class="stat-num" style="color:#f85149">👎 {disliked_count}</div>
+            <div class="stat-label">bad</div>
         </div>""", unsafe_allow_html=True)
 
     st.markdown("---")
     st.markdown("#### 一括操作")
     if st.button("✅ 表示中を全既読"):
         articles_to_mark = load_articles(unread_only=unread_only, category=selected_category)
-        mark_all_as_read([a["article_id"] for a in articles_to_mark])
+        for a in articles_to_mark:
+            mark_as_read(a["article_id"])
         st.rerun()
 
     st.markdown("---")
-    st.caption("v3.6 | GitHub Actions + Gemini API")
+    st.caption("v4.0 | RAWモード（フィードバック収集中）")
 
 # ─── メインコンテンツ ─────────────────────────────────
 st.markdown(f"### {CATEGORY_LABELS.get(selected_category, selected_category)}")
@@ -212,41 +193,20 @@ else:
         article_id = article["article_id"]
         category = article.get("master_category", "OTHER")
         is_read = article.get("is_read", False)
-        tags = article.get("tags", [])
-        score = article.get("adjusted_score", article.get("final_score", 0.5))
-        is_fallback = article.get("is_fallback", False)
-
-        badge_html = f'<span class="badge badge-{category}">{category}</span>'
-        if is_fallback:
-            badge_html += '<span class="badge badge-FB">RAW</span>'
-
-        tags_html = " ".join(f'<span class="tag">{t}</span>' for t in tags[:5])
-
-        if score >= 0.70:
-            score_color = "#3fb950"
-            score_label = "◎"
-        elif score >= 0.40:
-            score_color = "#d29922"
-            score_label = "○"
-        else:
-            score_color = "#f85149"
-            score_label = "△"
-
         pub = article.get("published_at", "")[:10]
         source = article.get("source", "")
 
-        # ボタン列（左）+ 記事内容列（右）
+        badge_html = f'<span class="badge badge-{category}">{category}</span>'
+
         btn_col, content_col = st.columns([1, 10])
 
         with btn_col:
             st.markdown("<div style='padding-top:8px'>", unsafe_allow_html=True)
             if st.button("👍", key=f"like_{article_id}", help="興味あり"):
-                save_feedback(article_id, tags, category, "like")
-                mark_as_read(article_id)
+                save_feedback(article_id, [], category, "like")
                 st.rerun()
             if st.button("👎", key=f"dislike_{article_id}", help="興味なし"):
-                save_feedback(article_id, tags, category, "dislike")
-                mark_as_read(article_id)
+                save_feedback(article_id, [], category, "dislike")
                 st.rerun()
             if not is_read:
                 if st.button("✓", key=f"read_{article_id}", help="既読にする"):
@@ -255,17 +215,13 @@ else:
             st.markdown("</div>", unsafe_allow_html=True)
 
         with content_col:
+            read_class = "is-read" if is_read else ""
             st.markdown(f"""
-            <div class="news-card">
+            <div class="news-card {read_class}">
                 {badge_html}
                 <span style="font-size:11px;color:#6e7681">{source} · {pub}</span>
                 <div class="article-title">
                     <a href="{article['url']}" target="_blank">{article.get('title','')}</a>
-                </div>
-                <div class="summary-text">{article.get('summary','')}</div>
-                <div style="margin-top:4px">
-                    {tags_html}
-                    <span style="font-size:10px;color:{score_color};font-family:monospace;margin-left:6px">{score_label} {score:.3f}</span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
