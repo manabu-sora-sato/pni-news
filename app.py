@@ -135,8 +135,8 @@ with st.sidebar:
     unread_only = st.toggle("未読のみ表示", value=True)
     st.markdown("---")
 
-    total_count = count_articles()
-    unread_count = count_articles(unread_only=True)
+    total_count = 0
+    unread_count = 0
 
     try:
         fb = load_feedback()
@@ -176,7 +176,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("#### 一括操作")
     if st.button("✅ 表示中を全既読"):
-        articles_to_mark = load_articles(unread_only=unread_only, category=selected_category)
+        articles_to_mark = []
         for a in articles_to_mark:
             mark_as_read(a["article_id"])
         st.rerun()
@@ -187,7 +187,7 @@ with st.sidebar:
 # ─── メインコンテンツ ─────────────────────────────────
 st.markdown(f"### {CATEGORY_LABELS.get(selected_category, selected_category)}")
 
-articles = load_articles(unread_only=unread_only, category=selected_category)
+articles = []
 
 if not articles:
     st.info("📭 表示できる記事がありません。GitHub Actionsでフェッチを実行してください。")
