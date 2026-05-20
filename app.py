@@ -35,8 +35,6 @@ def restore_feedback_from_github():
     except Exception as e:
         print(f"[restore] failed: {e}")
 
-restore_feedback_from_github()
-
 # ─── ページ設定 ─────────────────────────────────
 st.set_page_config(
     page_title="PNI - パーソナル・ニュース・インテリジェンス",
@@ -44,6 +42,10 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+if "feedback_restored" not in st.session_state:
+    restore_feedback_from_github()
+    st.session_state["feedback_restored"] = True
 
 # ─── カスタムCSS ─────────────────────────────────
 st.markdown("""
