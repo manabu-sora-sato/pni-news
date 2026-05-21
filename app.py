@@ -1,5 +1,5 @@
 """
-app.py - Streamlit UI (v4.0: Actions専用エンドポイント搭載)
+app.py - Streamlit UI (v4.1: ヘッダー検知型エンドポイント搭載)
 PNI: Personalized News Intelligence
 """
 
@@ -16,19 +16,20 @@ sys.path.insert(0, str(Path(__file__).parent))
 from utils.data_loader import load_articles, mark_as_read, mark_all_as_read, count_articles, count_fallback_articles
 from utils.feedback import save_feedback, load_feedback
 
-# ─── 【重要】GitHub Actions専用のシークレット・ダウンロード窓口 ───
-# URLの末尾に `?page=download_feedback_log` がついた場合、UIを描画せずにログテキストだけを即座に返却して終了します。
-query_params = st.query_params
-if query_params.get("page") == "download_feedback_log":
+# ─── GitHub Actions専用のエンドポイント（ヘッダー検知方式） ───
+# Actionsからの通信に含まれる特定のヘッダーを検知し、ログテキストを出力します。
+from streamlit.web.server.websocket_headers import _get_websocket_headers
+headers = _get_websocket_headers()
+
+if headers and headers.get("X-Download-Token") == "pni-secure-sync":
     fb_records = load_feedback()
-    # ログが空でなければ、jsonl形式の文字列を生成して画面に全出力
     if fb_records:
         import json
         output = "\n".join(json.dumps(r, ensure_ascii=False) for r in fb_records) + "\n"
         st.text(output)
     else:
         st.text("")
-    st.stop()  # ここでStreamlitの通常の画面描画を強制停止
+    st.stop()
 
 st.set_page_config(
     page_title="PNI - パーソナル・ニュース・インテリジェンス",
@@ -126,7 +127,7 @@ with st.sidebar:
     st.button("👎 表示中を全BAD", on_click=handle_bulk_bad)
 
     st.markdown("---")
-    st.caption("v4.0 | GitHub Actions")
+    st.caption("v4.1 | GitHub Actions")
 
 # ─── メインコンテンツ ─────────────────────────────────
 st.markdown(f"### {CATEGORY_LABELS.get(selected_category, selected_category)}")
