@@ -18,8 +18,9 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          # ─── 修正箇所：Hugging Faceのアプリ窓口（Streamlit直結URL）から直接吸い上げる ───
-          curl -s -L "https://cryuff-pni-news.hf.space/?page=download_feedback_log" \
+          # パラメータではなく、ヘッダーに秘密の合言葉を仕込んでリクエスト
+          curl -s -L -H "X-Download-Token: pni-secure-sync" \
+            "https://cryuff-pni-news.hf.space/" \
             -o data/user_feedback_log.jsonl
 
       - name: Commit and push feedback backup
