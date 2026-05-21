@@ -18,8 +18,8 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          curl -s -H "Authorization: Bearer $HF_TOKEN" \
-            "https://huggingface.co/spaces/cryuff/pni-news/resolve/main/data/user_feedback_log.jsonl" \
+          # ─── 修正箇所：Hugging Faceのアプリ窓口（Streamlit直結URL）から直接吸い上げる ───
+          curl -s -L "https://cryuff-pni-news.hf.space/?page=download_feedback_log" \
             -o data/user_feedback_log.jsonl
 
       - name: Commit and push feedback backup
