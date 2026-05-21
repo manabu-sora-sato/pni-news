@@ -1,5 +1,5 @@
 """
-app.py - Streamlit UI (v4.1: ヘッダー検知型エンドポイント搭載)
+app.py - Streamlit UI
 PNI: Personalized News Intelligence
 """
 
@@ -9,28 +9,59 @@ import streamlit as st
 import sys
 import datetime
 from pathlib import Path
-from apscheduler.schedulers.background import BackgroundScheduler
 
 sys.path.insert(0, str(Path(__file__).parent))
 
 from utils.data_loader import load_articles, mark_as_read, mark_all_as_read, count_articles, count_fallback_articles
-from utils.feedback import save_feedback, load_feedback
+from utils.feedback import save_feedback
 
-# ─── GitHub Actions専用のエンドポイント（ヘッダー検知方式） ───
-# Actionsからの通信に含まれる特定のヘッダーを検知し、ログテキストを出力します。
-from streamlit.web.server.websocket_headers import _get_websocket_headers
-headers = _get_websocket_headers()
+def restore_feedback_from_github():
+    """起動時にGitHubからフィードバックデータを復元"""
+    token = os.environ.get("GITHUB_TOKEN_READ", "")
+    if not token:
+        return
+    feedback_path = Path("data/user_feedback_log.jsonl")
+    feedback_path.parent.mkdir(exist_ok=True)
+    if feedback_path.exists() and feedback_path.stat().st_size > 0:
+        return
+    try:
+        url = "https://raw.githubusercontent.com/manabu-sora-sato/pni-news/main/data/user_feedback_log.jsonl"
+        headers = {"Authorization": f"token {token}"}
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            lines = [l for l in response.text.splitlines() if l.strip().startswith("{")]
+            if lines:
+                feedback_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                print(f"[restore] feedback restored: {len(lines)} records")
+    except Exception as e:
+        print(f"[restore] failed: {e}")
 
-if headers and headers.get("X-Download-Token") == "pni-secure-sync":
-    fb_records = load_feedback()
-    if fb_records:
-        import json
-        output = "\n".join(json.dumps(r, ensure_ascii=False) for r in fb_records) + "\n"
-        st.text(output)
-    else:
-        st.text("")
-    st.stop()
+def restore_processed_from_github():
+    """起動時にGitHubから既読・処理済みステータスデータを復元"""
+    token = os.environ.get("GITHUB_TOKEN_READ", "")
+    if not token:
+        return
+    processed_path = Path("data/processed_news.jsonl")
+    processed_path.parent.mkdir(exist_ok=True)
+    if processed_path.exists() and processed_path.stat().st_size > 0:
+        return
+    try:
+        url = "https://raw.githubusercontent.com/manabu-sora-sato/pni-news/main/data/processed_news.jsonl"
+        headers = {"Authorization": f"token {token}"}
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            lines = [l for l in response.text.splitlines() if l.strip().startswith("{")]
+            if lines:
+                processed_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                print(f"[restore] processed data restored: {len(lines)} records")
+    except Exception as e:
+        print(f"[restore] processed restore failed: {e}")
 
+# 起動時に両方のマスターデータをプル
+restore_feedback_from_github()
+restore_processed_from_github()
+
+# ─── ページ設定 ─────────────────────────────────
 st.set_page_config(
     page_title="PNI - パーソナル・ニュース・インテリジェンス",
     page_icon="📰",
@@ -38,6 +69,84 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# ─── カスタムCSS ─────────────────────────────────
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Noto Sans JP', sans-serif;
+}
+
+.news-card {
+    background: #1a1a2e;
+    border: 1px solid #16213e;
+    border-left: 4px solid #0f3460;
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 6px;
+    transition: border-left-color 0.2s;
+}
+.news-card:hover { border-left-color: #e94560; }
+.news-card.is-read { opacity: 0.5; }
+
+.badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.05em;
+    margin-right: 6px;
+}
+.badge-NEWS   { background: #1a2a3a; color: #79c0ff; border: 1px solid #79c0ff44; }
+.badge-DEV    { background: #0f3460; color: #58a6ff; border: 1px solid #58a6ff44; }
+.badge-ECON   { background: #1a3a1a; color: #56d364; border: 1px solid #56d36444; }
+.badge-HEALTH { background: #3a1a1a; color: #f78166; border: 1px solid #f7816644; }
+.badge-THOUGHT{ background: #2a1a3a; color: #bc8cff; border: 1px solid #bc8cff44; }
+.badge-OTHER  { background: #2a2a2a; color: #8b949e; border: 1px solid #8b949e44; }
+.badge-FB     { background: #1a2a1a; color: #3fb950; border: 1px solid #3fb95044; }
+
+.tag {
+    display: inline-block;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: #0d1117;
+    color: #8b949e;
+    border: 1px solid #30363d;
+    margin: 2px 2px 0 0;
+}
+
+.summary-text {
+    font-size: 13px;
+    color: #c9d1d9;
+    line-height: 1.6;
+    margin: 6px 0 4px 0;
+}
+
+.article-title a {
+    font-size: 15px;
+    font-weight: 700;
+    color: #e6edf3;
+    text-decoration: none;
+}
+.article-title a:hover { color: #e94560; }
+
+.stat-box {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 12px 16px;
+    text-align: center;
+}
+.stat-num { font-size: 28px; font-weight: 700; color: #e6edf3; }
+.stat-label { font-size: 11px; color: #8b949e; margin-top: 2px; }
+</style>
+""", unsafe_allow_html=True)
+
+# ─── カテゴリ定数 ─────────────────────────────────
 CATEGORIES = ["ALL", "NEWS", "DEV", "ECON", "HEALTH", "THOUGHT", "OTHER"]
 CATEGORY_LABELS = {
     "ALL": "🌐 すべて",
@@ -49,18 +158,20 @@ CATEGORY_LABELS = {
     "OTHER": "📌 その他",
 }
 
+# ─── サイドバー ─────────────────────────────────
 with st.sidebar:
     st.markdown("## 📰 PNI")
-    st.markdown("Personalized News Intelligence")
+    st.markdown("**Personalized News Intelligence**")
     
+    # ─── 最終取得日時の表示 ──────────────────
     raw_path = Path("data/raw_news.jsonl")
     if raw_path.exists():
         mtime = raw_path.stat().st_mtime
         last_fetch_dt = datetime.datetime.fromtimestamp(mtime)
         last_fetch_str = last_fetch_dt.strftime("%m/%d %H:%M")
-        st.markdown(f"⏱️ 最終取得: `{last_fetch_str}`")
+        st.markdown(f"⏱️ **最終取得:** `{last_fetch_str}`")
     else:
-        st.markdown("⏱️ 最終取得: `---`")
+        st.markdown("⏱️ **最終取得:** `---`")
         
     st.markdown("---")
 
@@ -76,9 +187,9 @@ with st.sidebar:
     total_count = count_articles()
     unread_count = count_articles(unread_only=True)
     fallback_count = count_fallback_articles()
-    
     liked_count = 0
     try:
+        from utils.feedback import load_feedback
         fb = load_feedback()
         liked_count = len(fb)
     except Exception:
@@ -113,49 +224,29 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("#### 一括操作")
-    
-    def handle_bulk_read(cats=selected_category, unread=unread_only):
-        articles_to_mark = load_articles(unread_only=unread, category=cats)
+    if st.button("✅ 表示中を全既読"):
+        articles_to_mark = load_articles(unread_only=unread_only, category=selected_category)
         mark_all_as_read([a["article_id"] for a in articles_to_mark])
+        st.rerun()
 
-    def handle_bulk_bad(cats=selected_category, unread=unread_only):
-        articles_to_bad = load_articles(unread_only=unread, category=cats)
+    if st.button("👎 表示中を全BAD"):
+        articles_to_bad = load_articles(unread_only=unread_only, category=selected_category)
         for a in articles_to_bad:
             save_feedback(a["article_id"], a.get("tags", []), a.get("master_category", "OTHER"), "dislike")
-
-    st.button("✅ 表示中を全既読", on_click=handle_bulk_read)
-    st.button("👎 表示中を全BAD", on_click=handle_bulk_bad)
+        mark_all_as_read([a["article_id"] for a in articles_to_bad])
+        st.rerun()
 
     st.markdown("---")
-    st.caption("v4.1 | GitHub Actions")
+    st.caption("v3.6 | GitHub Actions")
 
 # ─── メインコンテンツ ─────────────────────────────────
 st.markdown(f"### {CATEGORY_LABELS.get(selected_category, selected_category)}")
 
-# ─── 動的検証表示 ───
-target_file = Path("/tmp/pni-data/user_feedback_log.jsonl")
-if not target_file.exists():
-    target_file = Path(__file__).parent.parent / "data" / "user_feedback_log.jsonl"
-
-if target_file.exists():
-    file_size = target_file.stat().st_size
-    st.success(f"【最新版コード動的検証】ファイル存在確認: OK / サイズ: {file_size} bytes")
-else:
-    st.warning("【最新版コード動的検証】まだフィードバックデータが書き込まれていません。ボタンを押してください。")
-
 total_matched_count = count_articles(unread_only=unread_only, category=selected_category)
 articles = load_articles(unread_only=unread_only, category=selected_category)
 
-def handle_action(action_type, aid, atags, acat):
-    if action_type == "like":
-        save_feedback(aid, atags, acat, "like")
-    elif action_type == "dislike":
-        save_feedback(aid, atags, acat, "dislike")
-    elif action_type == "read":
-        mark_as_read(aid)
-
 if not articles:
-    st.info("📭 表示できる記事がありません。")
+    st.info("📭 表示できる記事がありません。GitHub Actionsでフェッチを実行してください。")
 else:
     st.caption(f"{len(articles)} / {total_matched_count} 件表示中")
 
@@ -190,11 +281,18 @@ else:
 
         with btn_col:
             st.markdown("<div style='padding-top:8px'>", unsafe_allow_html=True)
-            st.button("👍", key=f"like_{article_id}", help="興味あり", on_click=handle_action, args=("like", article_id, tags, category))
-            st.button("👎", key=f"dislike_{article_id}", help="興味なし", on_click=handle_action, args=("dislike", article_id, tags, category))
-            
+            if st.button("👍", key=f"like_{article_id}", help="興味あり"):
+                save_feedback(article_id, tags, category, "like")
+                mark_as_read(article_id)
+                st.rerun()
+            if st.button("👎", key=f"dislike_{article_id}", help="興味なし"):
+                save_feedback(article_id, tags, category, "dislike")
+                mark_as_read(article_id)
+                st.rerun()
             if not is_read:
-                st.button("✓", key=f"read_{article_id}", help="既読にする", on_click=handle_action, args=("read", article_id, tags, category))
+                if st.button("✓", key=f"read_{article_id}", help="既読にする"):
+                    mark_as_read(article_id)
+                    st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
         with content_col:

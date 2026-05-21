@@ -1,54 +1,85 @@
+"""
+feedback.py - FEEDBACK LAYER
+👍/👎 永続保存・学習用スコア補正
+"""
 import json
 import os
+import base64
+import requests
 from datetime import datetime, timezone
 from pathlib import Path
 
-# ─── 修正箇所：GitHub Actionsのバックアップファイル名とパスに完全に統一 ───
-DATA_DIR = Path(__file__).parent.parent / "data"
-ACTIONS_FILE = DATA_DIR / "user_feedback_log.jsonl"
+DATA_DIR = Path("data")
+FEEDBACK_FILE = DATA_DIR / "user_feedback_log.jsonl"
+
+GITHUB_REPO = "manabu-sora-sato/pni-news"
+GITHUB_FILE_PATH = "data/user_feedback_log.jsonl"
+
+def _save_to_github(content: str):
+    """GitHub APIでフィードバックファイルを直接更新"""
+    token = os.environ.get("GITHUB_TOKEN_READ", "")
+    if not token:
+        print("[github] GITHUB_TOKEN_READ not found")
+        return
+
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+
+    # 現在のファイルのSHAを取得
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
+    sha = None
+    try:
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 200:
+            sha = r.json().get("sha")
+    except Exception as e:
+        print(f"[github] get sha error: {e}")
+        return
+
+    # ファイルを更新
+    try:
+        encoded = base64.b64encode(content.encode("utf-8")).decode("utf-8")
+        body = {
+            "message": f"backup: feedback {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
+            "content": encoded,
+        }
+        if sha:
+            body["sha"] = sha
+        r = requests.put(url, headers=headers, json=body, timeout=15)
+        print(f"[github] save status: {r.status_code}")
+    except Exception as e:
+        print(f"[github] save error: {e}")
 
 def save_feedback(article_id: str, tags: list, category: str, action: str):
-    try:
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-    except Exception:
-        # ディレクトリ作成権限が制限されている場合はスキップして書き込みへ移行
-        pass
-
+    DATA_DIR.mkdir(exist_ok=True)
     record = {
         "article_id": article_id,
-        "action": action,
-        "category": category,
         "tags": tags,
+        "category": category,
+        "action": action,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
-    
-    # 既存ファイルへの追記（"a"）は一般ユーザー権限でも許可されるケースに対応
-    try:
-        with open(ACTIONS_FILE, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
-    except PermissionError:
-        # 万が一制限が厳しい場合は代替の自由領域へ書き込みを逃がす
-        ALT_DIR = Path("/tmp/pni-data")
-        ALT_DIR.mkdir(parents=True, exist_ok=True)
-        with open(ALT_DIR / "user_feedback_log.jsonl", "a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    with open(FEEDBACK_FILE, "a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+    # GitHubに直接保存
+    content = FEEDBACK_FILE.read_text(encoding="utf-8")
+    _save_to_github(content)
 
 def load_feedback() -> list:
     records = []
-    # 正常ルートと代替ルートの両方からログを読み込む
-    paths = [ACTIONS_FILE, Path("/tmp/pni-data/user_feedback_log.jsonl")]
-    for path in paths:
-        if path.exists():
-            with open(path, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line:
-                        try:
-                            data = json.loads(line)
-                            if data.get("action") in ["like", "dislike"]:
-                                records.append(data)
-                        except Exception:
-                            pass
+    if not FEEDBACK_FILE.exists():
+        return records
+    with open(FEEDBACK_FILE, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                try:
+                    records.append(json.loads(line))
+                except Exception:
+                    pass
     return records
 
 def get_tag_preference_scores() -> dict:
