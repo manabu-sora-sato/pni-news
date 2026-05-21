@@ -1,5 +1,5 @@
 """
-app.py - Streamlit UI
+app.py - Streamlit UI (v4.0: Actions専用エンドポイント搭載)
 PNI: Personalized News Intelligence
 """
 
@@ -15,7 +15,20 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from utils.data_loader import load_articles, mark_as_read, mark_all_as_read, count_articles, count_fallback_articles
 from utils.feedback import save_feedback, load_feedback
-from utils.github_sync import sync_actions_to_github
+
+# ─── 【重要】GitHub Actions専用のシークレット・ダウンロード窓口 ───
+# URLの末尾に `?page=download_feedback_log` がついた場合、UIを描画せずにログテキストだけを即座に返却して終了します。
+query_params = st.query_params
+if query_params.get("page") == "download_feedback_log":
+    fb_records = load_feedback()
+    # ログが空でなければ、jsonl形式の文字列を生成して画面に全出力
+    if fb_records:
+        import json
+        output = "\n".join(json.dumps(r, ensure_ascii=False) for r in fb_records) + "\n"
+        st.text(output)
+    else:
+        st.text("")
+    st.stop()  # ここでStreamlitの通常の画面描画を強制停止
 
 st.set_page_config(
     page_title="PNI - パーソナル・ニュース・インテリジェンス",
@@ -23,93 +36,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
-
-# ─── 1時間ごとのリポジトリ自己同期タイマー ─────────────────
-@st.cache_resource
-def init_background_sync():
-    scheduler = BackgroundScheduler()
-    scheduler.add_job(sync_actions_to_github, 'interval', minutes=60)
-    scheduler.start()
-    return scheduler
-
-init_background_sync()
-
-# ─── カスタムCSS ─────────────────────────────────
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap');
-
-html, body, [class*="css"] {
-    font-family: 'Noto Sans JP', sans-serif;
-}
-
-.news-card {
-    background: #1a1a2e;
-    border: 1px solid #16213e;
-    border-left: 4px solid #0f3460;
-    border-radius: 8px;
-    padding: 14px 18px;
-    margin-bottom: 6px;
-    transition: border-left-color 0.2s;
-}
-.news-card:hover { border-left-color: #e94560; }
-.news-card.is-read { opacity: 0.5; }
-
-.badge {
-    display: inline-block;
-    font-size: 10px;
-    font-weight: 700;
-    padding: 2px 8px;
-    border-radius: 20px;
-    font-family: 'JetBrains Mono', monospace;
-    letter-spacing: 0.05em;
-    margin-right: 6px;
-}
-.badge-NEWS   { background: #1a2a3a; color: #79c0ff; border: 1px solid #79c0ff44; }
-.badge-DEV     { background: #0f3460; color: #58a6ff; border: 1px solid #58a6ff44; }
-.badge-ECON   { background: #1a3a1a; color: #56d364; border: 1px solid #56d36444; }
-.badge-HEALTH { background: #3a1a1a; color: #f78166; border: 1px solid #f7816644; }
-.badge-THOUGHT{ background: #2a1a3a; color: #bc8cff; border: 1px solid #bc8cff44; }
-.badge-OTHER  { background: #2a2a2a; color: #8b949e; border: 1px solid #8b949e44; }
-.badge-FB     { background: #1a2a1a; color: #3fb950; border: 1px solid #3fb95044; }
-
-.tag {
-    display: inline-block;
-    font-size: 10px;
-    padding: 1px 6px;
-    border-radius: 4px;
-    background: #0d1117;
-    color: #8b949e;
-    border: 1px solid #30363d;
-    margin: 2px 2px 0 0;
-}
-
-.summary-text {
-    font-size: 13px;
-    color: #c9d1d9;
-    line-height: 1.6;
-    margin: 6px 0 4px 0;
-}
-
-.article-title a {
-    font-size: 15px;
-    font-weight: 700;
-    color: #e6edf3;
-    text-decoration: none;
-}
-.article-title a:hover { color: #e94560; }
-
-.stat-box {
-    background: #161b22;
-    border: 1px solid #30363d;
-    border-radius: 8px;
-    padding: 12px 16px;
-    text-align: center;
-}
-.stat-num { font-size: 28px; font-weight: 700; color: #e6edf3; }
-.stat-label { font-size: 11px; color: #8b949e; margin-top: 2px; }
-</style>
-""", unsafe_allow_html=True)
 
 CATEGORIES = ["ALL", "NEWS", "DEV", "ECON", "HEALTH", "THOUGHT", "OTHER"]
 CATEGORY_LABELS = {
@@ -200,25 +126,21 @@ with st.sidebar:
     st.button("👎 表示中を全BAD", on_click=handle_bulk_bad)
 
     st.markdown("---")
-    
-    if st.button("🔄 今すぐリポジトリ同期を実行"):
-        with st.spinner("GitHubリポジトリへデータをプッシュ中..."):
-            sync_actions_to_github()
-        st.success("同期処理を呼び出しました。")
-
-    st.markdown("---")
-    st.caption("v3.9 | GitHub Actions")
+    st.caption("v4.0 | GitHub Actions")
 
 # ─── メインコンテンツ ─────────────────────────────────
 st.markdown(f"### {CATEGORY_LABELS.get(selected_category, selected_category)}")
 
-# ─── 現在地を特定するための検証表示コード ───
-target_file = Path("/tmp/pni-data/user_actions.jsonl")
+# ─── 動的検証表示 ───
+target_file = Path("/tmp/pni-data/user_feedback_log.jsonl")
+if not target_file.exists():
+    target_file = Path(__file__).parent.parent / "data" / "user_feedback_log.jsonl"
+
 if target_file.exists():
     file_size = target_file.stat().st_size
     st.success(f"【最新版コード動的検証】ファイル存在確認: OK / サイズ: {file_size} bytes")
 else:
-    st.warning(f"【最新版コード動的検証】以下のターゲットパスにファイルがありません: {target_file.resolve()}")
+    st.warning("【最新版コード動的検証】まだフィードバックデータが書き込まれていません。ボタンを押してください。")
 
 total_matched_count = count_articles(unread_only=unread_only, category=selected_category)
 articles = load_articles(unread_only=unread_only, category=selected_category)
@@ -232,7 +154,7 @@ def handle_action(action_type, aid, atags, acat):
         mark_as_read(aid)
 
 if not articles:
-    st.info("📭 表示できる記事がありません。GitHub Actionsでフェッチを実行してください。")
+    st.info("📭 表示できる記事がありません。")
 else:
     st.caption(f"{len(articles)} / {total_matched_count} 件表示中")
 
