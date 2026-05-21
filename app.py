@@ -7,6 +7,7 @@ import os
 import requests
 import streamlit as st
 import sys
+import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -28,7 +29,6 @@ def restore_feedback_from_github():
         headers = {"Authorization": f"token {token}"}
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
-            # Entry not found などの無効な行を除外
             lines = [l for l in response.text.splitlines() if l.strip().startswith("{")]
             if lines:
                 feedback_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -36,7 +36,30 @@ def restore_feedback_from_github():
     except Exception as e:
         print(f"[restore] failed: {e}")
 
+def restore_processed_from_github():
+    """起動時にGitHubから既読・処理済みステータスデータを復元"""
+    token = os.environ.get("GITHUB_TOKEN_READ", "")
+    if not token:
+        return
+    processed_path = Path("data/processed_news.jsonl")
+    processed_path.parent.mkdir(exist_ok=True)
+    if processed_path.exists() and processed_path.stat().st_size > 0:
+        return
+    try:
+        url = "https://raw.githubusercontent.com/manabu-sora-sato/pni-news/main/data/processed_news.jsonl"
+        headers = {"Authorization": f"token {token}"}
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            lines = [l for l in response.text.splitlines() if l.strip().startswith("{")]
+            if lines:
+                processed_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                print(f"[restore] processed data restored: {len(lines)} records")
+    except Exception as e:
+        print(f"[restore] processed restore failed: {e}")
+
+# 起動時に両方のマスターデータをプル
 restore_feedback_from_github()
+restore_processed_from_github()
 
 # ─── ページ設定 ─────────────────────────────────
 st.set_page_config(
@@ -139,6 +162,17 @@ CATEGORY_LABELS = {
 with st.sidebar:
     st.markdown("## 📰 PNI")
     st.markdown("**Personalized News Intelligence**")
+    
+    # ─── 最終取得日時の表示 ──────────────────
+    raw_path = Path("data/raw_news.jsonl")
+    if raw_path.exists():
+        mtime = raw_path.stat().st_mtime
+        last_fetch_dt = datetime.datetime.fromtimestamp(mtime)
+        last_fetch_str = last_fetch_dt.strftime("%m/%d %H:%M")
+        st.markdown(f"⏱️ **最終取得:** `{last_fetch_str}`")
+    else:
+        st.markdown("⏱️ **最終取得:** `---`")
+        
     st.markdown("---")
 
     selected_category = st.radio(
@@ -195,18 +229,26 @@ with st.sidebar:
         mark_all_as_read([a["article_id"] for a in articles_to_mark])
         st.rerun()
 
+    if st.button("👎 表示中を全BAD"):
+        articles_to_bad = load_articles(unread_only=unread_only, category=selected_category)
+        for a in articles_to_bad:
+            save_feedback(a["article_id"], a.get("tags", []), a.get("master_category", "OTHER"), "dislike")
+        mark_all_as_read([a["article_id"] for a in articles_to_bad])
+        st.rerun()
+
     st.markdown("---")
-    st.caption("v3.6 | GitHub Actions + Gemini API")
+    st.caption("v3.6 | GitHub Actions")
 
 # ─── メインコンテンツ ─────────────────────────────────
 st.markdown(f"### {CATEGORY_LABELS.get(selected_category, selected_category)}")
 
+total_matched_count = count_articles(unread_only=unread_only, category=selected_category)
 articles = load_articles(unread_only=unread_only, category=selected_category)
 
 if not articles:
     st.info("📭 表示できる記事がありません。GitHub Actionsでフェッチを実行してください。")
 else:
-    st.caption(f"{len(articles)} 件表示中")
+    st.caption(f"{len(articles)} / {total_matched_count} 件表示中")
 
     for article in articles:
         article_id = article["article_id"]
@@ -235,7 +277,6 @@ else:
         pub = article.get("published_at", "")[:10]
         source = article.get("source", "")
 
-        # ボタン列（左）+ 記事内容列（右）
         btn_col, content_col = st.columns([1, 10])
 
         with btn_col:
